@@ -14,7 +14,7 @@ $discounted\_return$|贴现率|用来控制$delay \_ reward$.
 ---
 
 ## Return与状态值
-return的作用是衡量一个策略的良好程度,因此return十分重要。
+return的作用是衡量一个策略的良好程度，因此return十分重要。
 return也可以定义为沿着轨迹的含贴现率的reward总和。
 name|description|Supplement
 --:|:--:|:--
