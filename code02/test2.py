@@ -2,14 +2,14 @@ import random
 
 # 定义21点游戏的状态和行动空间
 state_space = [i for i in range(4, 22)]  # 玩家的点数，不包括A牌
-action_space = ["hit", "stick"]  # 行动：要牌 / 停牌
+action_space = ["take", "stop"]  # 行动：要牌 / 停牌
 
 # 初始化状态值函数和行动价值函数
 v_table = {}
 q_table = {}
 for state in state_space:
     v_table[state] = 0.0
-    q_table[state] = {"hit": 0.0, "stick": 0.0}
+    q_table[state] = {"take": 0.0, "stop": 0.0}
 
 # 定义蒙特卡洛强化学习参数
 num_episodes = 10000  # 轨迹数量
@@ -24,7 +24,7 @@ def get_next_state(state, action):
     :return: 如果状态合法则返回对应状态否则触碰到边界返回边界状态
     """
     next_state = state
-    if action == "hit":
+    if action == "take":
         next_state += random.randint(1, 10)
     return next_state
 
@@ -32,9 +32,8 @@ def get_next_state(state, action):
 # 定义epsilon-greedy策略
 def epsilon_greedy_policy(state, epsilon):
     """
-    如果生成的随机数小于epsilon则随机挑选一个行为.
-    否则从该状态对应的行为空间中挑选一个行为价值更大的行为。
-    返回对应的行为
+    epsilon-greedy策略
+    以epsilon的概率随机挑选一个行为，并以(1 - epsilon)的概率挑选行为价值最大的行为
     :param state:
     :param epsilon:
     :return:
@@ -48,9 +47,9 @@ def epsilon_greedy_policy(state, epsilon):
 # 运行蒙特卡洛强化学习算法
 for i in range(num_episodes):
     # 初始化游戏状态和轨迹
-    player_state = random.randint(4, 21)
-    dealer_showing = random.randint(1, 10)
-    trajectory = []
+    player_state = random.randint(4, 21)    # 玩家随机抽两张牌
+    dealer_showing = random.randint(1, 10)  # 庄家目前手上的牌
+    trajectory = [] # 轨迹
 
     # 执行当前策略并记录轨迹
     while True:
@@ -61,7 +60,7 @@ for i in range(num_episodes):
         if next_player_state > 21:
             reward = -1.0
             break
-        elif action == "stick":
+        elif action == "stop":
             dealer_total = dealer_showing + random.randint(1, 10)
             while dealer_total < 17:
                 dealer_total += random.randint(1, 10)
