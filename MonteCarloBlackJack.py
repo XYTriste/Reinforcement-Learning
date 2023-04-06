@@ -31,46 +31,22 @@ def print_winning_probability(rounds, trained_rounds, player_win, dealer_win, dr
     record_winning_rate(trained_rounds, player_winning_rate, dealer_winning_rate, not_lose_rate)
 
 
+def process_bar(rounds, i):
+    print("Training {:.4f}%".format((i / rounds) * 100))
+
+
 def epsilon_greedy_policy(player_state, usable_ace, epsilon=0.1):
     if random.uniform(0, 1) < epsilon:
         return env.action_space.sample()
     else:
-        return np.argmax(Q[player_state, usable_ace])
-
-
-def record_winning_rate(trained_rounds, player_winning_rate, dealer_winning_rate, not_lose_rate):
-    global record
-    record[trained_rounds] = (player_winning_rate, dealer_winning_rate, not_lose_rate)
-
-
-def initialization_training_data():
-    global V
-    global N
-    global Q
-    global Q_N
-    global epsilon
-
-    V = np.zeros(32)  # 状态价值
-    N = np.zeros(32)  # 状态出现次数
-    Q = np.random.rand(32, 2, 2) * 1E-5  # 行为价值
-    Q_N = np.zeros((32, 2, 2))  # 行为出现次数
-    epsilon = 1
+        return np.argmax(V[player_state])
 
 
 def monte_carlo():
-    initialization_training_data()
-    global epsilon
-
-    rounds = 1000000  # 迭代次数为10000
-    for i in range(rounds):  # 循环迭代
-        percent = rounds / 20
-        if i > 0 and i % percent == 0:
-            process_bar(rounds, i)
-            play_with_dealer(10000, i)
-
-        obs, _ = env.reset()  # 初始化环境，得到最初的观测空间，包含玩家手牌点数，庄家明牌点数
-        player_state, dealer_state, usable_ace = obs
-        usable_ace = 1 if usable_ace else 0
+    rounds = 10000
+    for i in range(rounds):
+        obs, _ = env.reset()
+        player_state, dealer_state, _ = obs
 
         trajectory = []
         states = []
@@ -79,17 +55,16 @@ def monte_carlo():
 
         done = False  # 游戏终止状态
         while not done:
-            action = epsilon_greedy_policy(player_state, usable_ace, epsilon)  # 使用epsilon策略获得一个动作
-            observation, reward, done, _, _ = env.step(action)  # 得到观测空间， 动作转移到某状态获得的即时奖励 游戏是否结束
+            action = epsilon_greedy_policy(player_state, dealer_state)
+            observation, reward, done, _, _ = env.step(action)
 
-            trajectory.append((player_state, dealer_state, action, usable_ace))  # 在轨迹中加入当前的状态-行动对
-            states.append(player_state)  # 将当前状态加入到一个状态列表中
-            actions.append(action)  # 将当前状态采取的动作加入到一个动作列表中
-            rewards.append(reward)  # 将当前状态采取动作获得的即时奖励加入一个奖励列表中
+            trajectory.append((player_state, dealer_state, action))
+            states.append(player_state)
+            actions.append(action)
+            rewards.append(reward)
 
-            player_state = observation[0]  # 从得到的观测空间中，得到玩家新的手牌点数
-            dealer_state = observation[1]  # 从得到的观测空间中，得到庄家新的手牌点数
-            usable_ace = 1 if usable_ace else 0
+            player_state = observation[0]
+            dealer_state = observation[1]
             # env.render()
         if epsilon > 0.1:
             epsilon *= 0.99
@@ -110,21 +85,20 @@ def monte_carlo():
         # else:
         #     print("dealer win.")
 
-        visited_set = set()  # 我们采用首次访问的方式，所以使用一个集合来记录出现过的状态-行动对
-        index = 0  # 记录我们当前在访问trajectory中的第几个状态-行动对
-        for p_state, d_state, action, usable_ace in trajectory:  # 遍历当前的trajectory
-            if (p_state, d_state, action, usable_ace) not in visited_set:  # 如果当前的状态-行动对没有出现过
-                visited_set.add((p_state, d_state, action, usable_ace))  # 把这个状态-行动对加入到集合中
-                N[p_state] += 1  # 记录状态出现的次数，将该状态出现的次数加一
-                alpha = 1.0 / N[p_state]  # alpha其实就是 状态出现的次数的倒数
+        visited_set = set()
+        index = 0
+        for p_state, d_state, action in trajectory:
+            if (p_state, d_state, action) not in visited_set:
+                visited_set.add((p_state, d_state, action))
+                N[p_state] += 1
+                alpha = 1.0 / N[p_state]
                 V[p_state] += alpha * (returns[index] - V[p_state])
                 # 使用当前状态对应的return 减去 当前的状态价值的差，乘以alpha，把它加到当前状态的状态价值中去。其实就是累进更新平均值的方式。
 
-                Q_N[p_state, usable_ace, action] += 1  # 记录当前状态-行为对出现的次数
-                alpha = 1.0 / Q_N[p_state, usable_ace, action]  # 同样是累进更新平均值
-                Q[p_state, usable_ace, action] += alpha * (
-                        returns[index] - Q[p_state, usable_ace, action])  # 使用这种方式更新 状态采取某行为的价值。
-            index += 1  # 访问完了一个状态-行动对，将index + 1
+                Q_N[p_state, action] += 1
+                alpha = 1.0 / Q_N[p_state, action]
+                Q[p_state, action] += alpha * (returns[index] - Q[p_state, action])
+            index += 1
 
 
 def show_value():
@@ -146,47 +120,6 @@ def show_value():
             print()
 
 
-def play_with_dealer(rounds, trained_rounds):
-    """
-    以下是玩家与庄家对抗时的信息
-    """
-    player_win = 0
-    dealer_win = 0
-    draw = 0
-    for i in range(rounds):
-        done = False
-
-        obs, _ = env.reset()
-        player_state, dealer_state, usable_ace = obs
-        usable_ace = 1 if usable_ace else 0
-        while not done:
-            action = epsilon_greedy_policy(player_state, usable_ace, 0)
-            observation, reward, done, _, _ = env.step(action)
-
-            _, _, usable_ace = observation
-            usable_ace = 1 if usable_ace else 0
-
-        if reward > 0:
-            player_win += 1
-        elif reward == 0:
-            draw += 1
-        else:
-            dealer_win += 1
-    print_winning_probability(rounds, trained_rounds, player_win, dealer_win, draw)
-
-
 if __name__ == '__main__':
     monte_carlo()
-    # show_value()
-
-    # play_with_dealer(10000, 10000)
-    maxRate = 0
-    maxRecord_round = 0
-    maxRecord = ()
-    for key, value in record.items():
-        if record[key][0] > maxRate:
-            maxRate = record[key][0]
-            maxRecord_round = key
-            maxRecord = record[key]
-
-    print("当迭代次数为 {} 时效果最好，此时玩家胜率为: {:.2f}%  庄家胜率为: {:.2f}%  玩家不败的概率为: {:.2f}%".format(maxRecord_round, maxRecord[0], maxRecord[1], maxRecord[2]))
+    show_value()
