@@ -426,5 +426,13 @@ $$
 注意到上述的行为策略$\mu(a\mid s)$和目标策略$\pi(a\mid s)$分别是一个$\epsilon -greedy\ policy$和一个完全贪婪策略。
 $Q(S_t,A_t)$按照下面的式子进行更新:
 $$
-Q(S_t,A_t) \leftarrow Q(S_t,A_t)+\alpha \bigg \color(R_{t+1}+\gamma Q(S_{t+1},A^{'}) - Q(S_t,A_t) \bigg )
+Q(S_t,A_t) \leftarrow Q(S_t,A_t)+\alpha \bigg( {\color{red} R_{t+1}+\gamma Q(S_{t+1},A^{'})} - Q(S_t,A_t) \bigg )
 $$
+其中，红色部分是基于目标策略$\pi(a,s)$产生的行为$A^{'}$得到的Q值。在这样的条件下，状态$S_t$的行为$A_t$的价值会朝着目标策略下确定的最大行为价值的方向做一定比例的更新。
+> 如果行为 $A_t$ 和目标策略的行为不是同一个行为，那么在 Q-learning 算法中，$Q(S_t, A_t)$ 的值会被更新，但是更新的幅度会比较小。
+具体来说，假设当前状态为 $S_t$，当前采取的行为为 $A_t$，根据 Q-learning 算法的更新公式：
+$$
+Q(S_t,A_t) \leftarrow Q(S_t,A_t)+\alpha \bigg(R_{t+1}+\gamma \max_{a^{'}}{Q(S_{t+1},A^{'})} - Q(S_t,A_t) \bigg )
+$$
+其中，$\max_{a^{'}}{Q(S_{t+1},A^{'})}$ 表示在下一个状态 $S_{t+1}$ 时采取所有行为 $a$ 中最大的 Q 值，即在下一个状态下的最优行为价值。
+如果 $A_t$ 和目标策略的行为不同，那么目标策略下的最大行为价值不一定是 $Q(S_{t+1}, A_t)$，而是 $\max_{a} Q(S_{t+1}, a)$，因为采取的行为 $A_t$ 可能不是目标策略下的最优行为。因此，$Q(S_t, A_t)$ 的更新量就会比较小，这也是 Q-learning 算法中存在一定偏差的原因。
