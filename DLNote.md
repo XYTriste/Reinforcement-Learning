@@ -78,7 +78,60 @@ w=
 w_1  \\
 \vdots \\
 w_n \\
-1
+b
 \end{matrix}
 \right)
 $$
+那么，我们的预测问题的目的就是最小化$||Y- \Bbb{\hat{Y}}||^2$，也就是最小化$||Y-Xw||^2$。由于损失函数是一个凸函数，所以它只具有一个全局极小值点。
+><font color="red">为什么损失函数是一个凸函数?</font>
+在线性回归中，我们通常使用均方误差（MSE）作为损失函数，其定义为：
+$$
+L(w,b) = \frac{1}{2n} \sum_{i=1}^{n} (y^{(i)} - \hat{y}^{(i)})^2 = \frac{1}{2n} \sum_{i=1}^{n} (y^{(i)} - (w^Tx^{(i)} + b))^2
+$$
+其中，$n$是样本数，$x^{(i)}$是第$i$个样本的特征向量，$y^{(i)}$是第$i$个样本的真实标签，$\hat{y}^{(i)}$是线性模型对第$i$个样本的预测值，$w$和$b$是模型的参数。
+\
+现在我们来证明一下MSE是一个凸函数。为了方便证明，我们令$\hat{y}^{(i)} = w^Tx^{(i)} + b$。
+\
+首先，我们可以计算损失函数关于$w$的Hessian矩阵：
+$$
+H(w,b) = \begin{bmatrix} \frac{\partial^2 L(w,b)}{\partial w_1^2} & \frac{\partial^2 L(w,b)}{\partial w_1 \partial w_2} & \cdots & \frac{\partial^2 L(w,b)}{\partial w_1 \partial b} \\ \frac{\partial^2 L(w,b)}{\partial w_2 \partial w_1} & \frac{\partial^2 L(w,b)}{\partial w_2^2} & \cdots & \frac{\partial^2 L(w,b)}{\partial w_2 \partial b} \\ \vdots & \vdots & \ddots & \vdots \\ \frac{\partial^2 L(w,b)}{\partial b \partial w_1} & \frac{\partial^2 L(w,b)}{\partial b \partial w_2} & \cdots & \frac{\partial^2 L(w,b)}{\partial b^2} \end{bmatrix}
+$$
+\
+其中，$H_{ij}(w,b) = \frac{\partial^2 L(w,b)}{\partial w_i \partial w_j}$。
+\
+我们可以发现，$H(w,b)$是一个对称矩阵。现在我们来证明$H(w,b)$是一个半正定矩阵。
+\
+对于任意向量$v=[v_1, v_2, \cdots, v_n]^T$，我们可以计算：
+$$
+v^T H(w,b) v = \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) v_i v_j
+$$
+根据二次型的定义，我们可以将上式变为：
+$$
+v^T H(w,b) v = \frac{1}{2} \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) v_i v_j + \frac{1}{2} \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) v_j v_i
+$$
+好的，接下来我会继续完成证明过程。
+
+根据偏导数的定义，我们可以得到：
+$$
+\frac{\partial^2 L(w,b)}{\partial w_i \partial w_j} = \frac{\partial}{\partial w_j} \frac{\partial L(w,b)}{\partial w_i} = \frac{\partial}{\partial w_j} \frac{1}{2m} \sum_{k=1}^{m} (\hat{y}^{(k)} - y^{(k)}) x_j^{(k)} x_i^{(k)} \\
+= \frac{1}{2m} \sum_{k=1}^{m} x_j^{(k)} \frac{\partial \hat{y}^{(k)}}{\partial w_i} = \frac{1}{m} \sum_{k=1}^{m} x_j^{(k)} x_i^{(k)}
+$$
+其中，我们使用了$\hat{y}^{(k)} = w^Tx^{(k)} + b$以及$L(w,b)$的定义。因此，$H_{ij}(w,b) = \frac{1}{m} \sum_{k=1}^{m} x_j^{(k)} x_i^{(k)}$。
+
+接下来，我们继续计算$v^T H(w,b) v$：
+$$
+v^T H(w,b) v = \frac{1}{2} \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) v_i v_j + \frac{1}{2} \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) v_j v_i \\
+= \frac{1}{2} \sum_{i=1}^{n} \sum_{j=1}^{n} \frac{1}{m} \sum_{k=1}^{m} x_j^{(k)} x_i^{(k)} v_i v_j + \frac{1}{2} \sum_{i=1}^{n} \sum_{j=1}^{n} \frac{1}{m} \sum_{k=1}^{m} x_j^{(k)} x_i^{(k)} v_j v_i \\
+= \frac{1}{m} \sum_{k=1}^{m} \sum_{i=1}^{n} \sum_{j=1}^{n} x_j^{(k)} x_i^{(k)} \frac{v_i v_j + v_j v_i}{2} \\​
+= \frac{1}{m} \sum_{k=1}^{m} \sum_{i=1}^{n} \sum_{j=1}^{n} x_j^{(k)} x_i^{(k)} (v_i v_j) \\
+= \frac{1}{m} \sum_{k=1}^{m} (\sum_{i=1}^{n} x_i^{(k)} v_i)^2 \geq 0
+$$
+接下来，我们使用了$x_j^{(k)}$和$v_j$的对称性质，将上式进一步简化为：
+$$
+v^T H(w,b) v = \frac{1}{2} \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) (v_i v_j + v_j v_i)
+$$
+注意到对于任意的$i,j$，有$H_{ij}(w,b) = H_{ji}(w,b)$，所以可以继续化简：
+$$
+v^T H(w,b) v = \frac{1}{2} \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) 2v_i v_j = \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) v_i v_j
+$$
+因此，$v^T H(w,b) v = \sum_{i=1}^{n} \sum_{j=1}^{n} H_{ij}(w,b) v_i v_j \geq 0$，证明了$H(w,b)$是一个半正定矩阵。因此，MSE损失函数是凸函数。
