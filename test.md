@@ -1,47 +1,30 @@
-接下来我们来看 $T$ 是否是一个压缩映射。假设 $V$ 和 $W$ 是任意两个状态价值函数，且 $V \geq W$ （即对于所有状态 $s$，$V(s) \geq W(s)$）。考虑到 $T$ 的定义，我们有：
+DQN（Deep Q-Network）算法是一种基于深度神经网络的强化学习算法，旨在解决Q-learning算法在高维状态空间中面临的问题。DQN算法的流程如下：
+
+定义输入状态$s$，动作$a$和输出$Q$值的深度神经网络$Q(s,a;\theta)$，其中$\theta$为神经网络的参数。
+初始化经验回放缓冲区$D$，用于存储过去的经验。
+对于每个时间步$t$，执行以下步骤：
+以$\epsilon$-贪心策略从网络中获取动作$a_t$。
+在环境中执行动作$a_t$，得到下一个状态$s_{t+1}$和奖励$r_t$。
+将$(s_t, a_t, r_t, s_{t+1})$存储到经验回放缓冲区$D$中。
+从$D$中随机抽取一个小批量的经验$(s_j, a_j, r_j, s_{j+1})$，并计算其目标Q值：
 $$
-\begin{aligned}
-(TV)(s) - (TW)(s) = \\
- \sum_{a} \pi(a|s) \sum_{s'} P(s'|s,a)[R(s,a,s')+\gamma V(s')] - \sum_{a} \pi(a|s) \sum_{s'} P(s'|s,a)[R(s,a,s')+\gamma W(s')] \\
-&= \gamma \sum_{a} \pi(a|s) \sum_{s'} P(s'|s,a) [V(s') - W(s')] \\
-&\leq \gamma \sum_{a} \pi(a|s) \sum_{s'} P(s'|s,a) [V(s') - W(s')] \\
-&\leq \gamma \sum_{s'} P(s'|s) [V(s') - W(s')] \\
-&\leq \gamma \lVert V - W \rVert_\infty
-\end{aligned}
-$$
-其中第一个等号是因为 $V \geq W$，第二个等号是由于 Bellman 期望方程的定义，不等式来自于 $V \geq W$，最后一个不等式是因为 $P(s'|s,a)$ 是概率分布。这证明了 $T$ 是一个 $\gamma$-压缩映射，即对于任何两个状态价值函数 $V$ 和 $W$，$T(V)$ 和 $T(W)$ 之间的 $\infty$-范数不超过 $\gamma$ 倍 $V$ 和 $W$ 之间的 $\infty$-范数。
+\begin{cases}
+r_j & \text{if } s_{j+1} \text{ is terminal},\\
+r_j + \gamma \max_{a'}Q(s_{j+1}, a';\theta^-) & \text{otherwise},
+\end{cases}$$
+其中$\gamma$为折扣因子，$\theta^-$为目标网络的参数。
+- 最小化均方误差损失函数：
+$$\mathcal{L}(\theta) = \frac{1}{N}\sum_{j=1}^{N}(y_j - Q(s_j, a_j;\theta))^2$$
+通过反向传播更新神经网络的参数$\theta$。
+- 每$C$步将当前的参数$\theta$复制给目标网络的参数$\theta^-$。
 
-接下来考虑使用压缩映射定理来证明 $T$ 的不动点存在且唯一。我们将定义一个迭代序列 $V_0, V_1, \ldots$，其中 $V_0$ 是任意的状态价值函数，而 $V_{k+1} = TV_k$。由于 $T$ 是一个 $\gamma$-压缩映射，我们知道 $\lVert V_{k+1} - V_k \rVert_\infty \leq \gamma \lVert V_k - V_{k-1} \rVert_\infty \leq \gamma^2 \lVert V_{k-1} - V_{k-2} \rVert_\infty \leq \cdots \leq \gamma^{k+1} \lVert V_0 - V_1 \rVert_\infty$。因此，$V_k$ 的收敛速度是 $\mathcal{O}(\gamma^k)$ 的，而且收敛到唯一的不动点 $V{}$，满足 $V^ = TV^{*}$。这就证明了贝尔曼方程的收敛性。
-\
-\
-\
-SARSA($\lambda$)是一种基于TD学习的强化学习算法，它可以用于求解基于动作的马尔可夫决策过程（MDP）问题。SARSA($\lambda$)算法的更新规则如下：
-
-初始化状态值函数 $Q(s,a)$，以及 效用迹 $e(s,a) = 0$。
-
-对于每一个时间步 $t$，执行以下操作：
-
-1. 根据当前状态 $S_t$，使用一个 $\epsilon$-greedy 策略选择动作 $A_t$。
-
-2. 执行动作 $A_t$，得到奖励 $R_{t+1}$ 和新状态 $S_{t+1}$。
-
-3. 根据新状态 $S_{t+1}$，使用一个 $\epsilon$-greedy 策略选择动作 $A_{t+1}$。
-
-4. 计算TD误差 $\delta_t = R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t, A_t)$。
-
-5. 将当前状态-动作对 $(S_t, A_t)$ 的 eligibility trace 加1，即 $e(S_t,A_t) \leftarrow e(S_t,A_t) + 1$。
-
-6. 对于所有状态-动作对 $(s,a)$，更新状态值函数和 eligibility traces：
-
- $$
- \begin{aligned}
- Q(s,a) &\leftarrow Q(s,a) + \alpha \delta_t e(s,a) \\
- e(s,a) &\leftarrow \gamma \lambda e(s,a) \quad \text{(衰减 eligibility traces)}
- \end{aligned}
- $$
- 
+其中，经验回放缓冲区的作用是为了让神经网络可以学习到之前的经验，以及避免连续的相关性影响学习效果。$\epsilon$-贪心策略可以平衡探索和利用之间的关系，其中$\epsilon$为探索概率。目标Q值的计算中，如果下一个状态$s_{j+1}$是终止状态，那么目标Q值就等于奖励$r_j$；否则目标Q值等于奖励加上下一步状态的最大Q值乘以折扣因子$\gamma$。由于DQN算法中采用了神经网络，导致目标函数不是凸的，因此使用随机梯度下降等优化算法进行参数更新。同时，为了进一步提高训练效率和稳定性，DQN算法还引入了目标网络，其参数
 
 
-这里 $\alpha$ 是学习率，$\gamma$ 是折扣因子，$\lambda$ 是一个参数，称为 $\lambda$ 返回（$\lambda$-return）。当 $\lambda = 0$ 时，SARSA($\lambda$) 等价于 SARSA；当 $\lambda = 1$ 时，SARSA($\lambda$) 等价于 TD($\lambda$)。
+这个公式描述了当$k \rightarrow \infty$时，$k$步转移概率矩阵$P_{\pi}^{k}$收敛到一个稳态分布向量$W$的过程，并且这个稳态分布向量$W$与一个行向量$1_n d_{\pi}^T$的乘积相等。下面解释一下公式中的符号：
 
-重复步骤2直到收敛。
+- $P_{\pi}^{k}$是$\pi$策略下，$k$步转移概率矩阵，其中$P_{\pi}^{k}(s, s')$表示在$\pi$策略下，从状态$s$出发$k$步后到达状态$s'$的概率。
+- $W$是稳态分布向量，它是$k \rightarrow \infty$时$k$步转移概率矩阵$P_{\pi}^{k}$的极限。稳态分布向量是一个$n$维列向量，其中第$i$个元素$W_i$表示在$\pi$策略下，MDP处于状态$i$的概率。
+- $1_n$是一个$n$维的全1列向量，$d_{\pi}$是一个$n$维的状态分布向量，它的每个元素$d_{\pi}(s)$表示在$\pi$策略下，MDP处于状态$s$的概率。
+
+因此，$1_n d_{\pi}^T$实际上是一个$n \times n$的矩阵，其中每一行都等于$d_{\pi}^T$，即每个元素都是状态分布向量$d_{\pi}$。将$P_{\pi}^{k}$乘以$1_n d_{\pi}^T$的结果是一个$n$维的列向量，其中第$i$个元素表示在$\pi$策略下，从任意状态出发经过$k$步后到达状态$i$的概率，即$P_{\pi}^{k}(s, i)$的和。因此，$P_{\pi}^{k} \rightarrow W = 1_nd_{\pi}^T$意味着，当$k$趋近于无穷大时，$k$步转移概率矩阵$P_{\pi}^{k}$的行向量之和（即状态分布向量）收敛到一个稳态分布向量$W$，并且这个稳态分布向量$W$与一个行向量$1_n d_{\pi}^T$的乘积相等。
