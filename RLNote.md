@@ -865,5 +865,20 @@ $$
 $$
 参数$\theta$采用下式更新:
 $$
-
+\theta_{t+1} = \theta_{t} + \alpha \nabla_{\theta}J(\theta)
+$$
+如果使用起始状态的状态价值作为对目标函数大小进行度量的标量，则对应的策略目标函数为:
+$$
+\begin{align}
+J(\theta)&=\Bbb E_{\pi_{\theta}}[r] \\
+&= \sum_{s \in S}{d(s)}\sum_{a \in A}{\pi_{\theta}(s,a)R_{s,a}}
+\end{align}
+$$
+如果对该策略目标函数进行求梯度，则结果为:
+$$
+\begin{align}
+\nabla_{\theta}J(\theta)&=\sum_{s \in S}{d(s)}\sum_{a \in A}{\nabla_{\theta}\pi_{\theta}(s,a)R_{s,a}} \\
+&=\sum_{s \in S}{d(s)}\sum_{a \in A}{\pi_{\theta}(s,a)\nabla_{\theta}log\pi_{\theta}(s,a)R_{s,a}}\\
+&=\Bbb E_{\pi_{\theta}}[\nabla_{\theta}log\pi_{\theta}(s,a)r]
+\end{align}
 $$
