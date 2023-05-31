@@ -31,9 +31,46 @@ $$\mathcal{L}(\theta) = \frac{1}{N}\sum_{j=1}^{N}(y_j - Q(s_j, a_j;\theta))^2$$
 
 策略梯度算法的梯度形式可以表示为：
 $$
-\nabla_{\theta}J(\theta) = \mathbb{E}_{\pi_{\theta}}\left[\nabla_{\theta} \log\pi_{\theta}(s,a) Q^{\pi_{\theta}}(s,a)\right]
-$$
+
 
 其中，$\pi_{\theta}$是策略函数，$\theta$是它的参数向量，$Q^{\pi_{\theta}}(s,a)$是策略$\pi_{\theta}$在状态$s$下采取动作$a$的收益期望，$\nabla_{\theta} \log\pi_{\theta}(s,a)$是策略函数的对数梯度。
 
 这个公式的意义是，对于一个状态-动作对$(s, a)$，其对策略的贡献是由该状态-动作对的收益期望$Q^{\pi_{\theta}}(s,a)$和策略函数$\pi_{\theta}$在该状态-动作对处的对数梯度$\nabla_{\theta} \log\pi_{\theta}(s,a)$的乘积决定的。通过最大化这个期望，我们可以更新策略函数的参数，使得策略能够在当前状态下采取更优的动作。
+
+
+$$
+\begin{align}
+\bar {r}_{\pi}=\sum_{s}d_{\pi}(s)r_{\pi}(s)&=\sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)r(s,a)} \\
+&=\sum_{s}{d_{\pi}(s)}
+\end{align}
+$$
+
+$$
+\begin{align}
+\sum_{s}{d_{\pi}(s)V_{\pi}(s)} &= \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)q_{\pi}(s,a)} \\
+\because \quad q_{\pi}(s,a)&=r(s,a)+\gamma\sum_{s^{'}}{P_{ss^{'}}^{a}v_{\pi}(s^{'})} \\
+\therefore \quad \sum_{s}{d_{\pi}(s)V_{\pi}(s)} &= \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)q_{\pi}(s,a)} \\
+&= \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)}\bigg[r(s,a)+\gamma\sum_{s^{'}}{P_{ss^{'}}^{a}v_{\pi}(s^{'})}\bigg] \\
+&= \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)}\big[r(s,a)\big] +\gamma \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)}\big[\sum_{s^{'}}{P_{ss^{'}}^{a}v_{\pi}(s^{'})}\big] \\
+&= \bar {r}_{\pi} + 
+\end{align}
+$$
+
+$$
+\begin{align}
+\sum_{s}{d_{\pi}(s)V_{\pi}(s)} &= \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)q_{\pi}(s,a)} \\
+\because \quad q_{\pi}(s,a)&=r(s,a)+\gamma\sum_{s^{'}}{P_{ss^{'}}^{a}v_{\pi}(s^{'})} \\
+\therefore \quad \sum_{s}{d_{\pi}(s)V_{\pi}(s)} &= \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)q_{\pi}(s,a)} \\
+&= \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)}\bigg[r(s,a)+\gamma\sum_{s^{'}}{P_{ss^{'}}^{a}v_{\pi}(s^{'})}\bigg] \\
+&= \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)}\big[r(s,a)\big] +\gamma \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)}\big[\sum_{s^{'}}{P_{ss^{'}}^{a}v_{\pi}(s^{'})}\big] \\
+&= \bar {r}_{\pi} + \gamma \sum_{s}{d_{\pi}(s)}\sum_{a}{\pi(a|s)}\big[\sum_{s^{'}}{P_{ss^{'}}^{a}v_{\pi}(s^{'})}\big] \\
+&= \bar {r}_{\pi} + \gamma \sum_{s}{d_{\pi}(s)} \bigg[\sum_{a}{\pi(a|s)}\sum_{s^{'}}{P_{ss^{'}}^{a}v_{\pi}(s^{'})}\bigg] \\
+&= \bar {r}_{\pi} + \gamma \sum_{s}{d_{\pi}(s)} \sum_{s^{'}} \bigg[\sum_{a}{\pi(a|s)}P_{ss^{'}}^{a}v_{\pi}(s^{'})\bigg] \\
+&= \bar {r}_{\pi} + \gamma \sum_{s^{'}} \bigg[\sum_{s}{d_{\pi}(s)} \sum_{a}{\pi(a|s)}P_{ss^{'}}^{a}v_{\pi}(s^{'})\bigg] \\
+&= \bar {r}_{\pi} + \gamma \sum_{s^{'}} P_{s^{'}}^{'} v_{\pi}(s^{'}) \\
+&= \bar {r}_{\pi} + \gamma \bar {v}_{\pi} \\
+\therefore \bar {v}_{\pi}=\bar {r}_{\pi} + \gamma \bar {v}_{\pi} \\
+\bar {r}_{\pi}=(1-\gamma)\bar {v}_{\pi}
+\end{align}
+$$
+
