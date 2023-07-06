@@ -1,2 +1,3 @@
-*.pdf
+./*.pdf
+RLNote.pdf
 ./Markdown note/test.md
