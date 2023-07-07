@@ -74,3 +74,101 @@ $$
 \end{align}
 $$
 
+在这个规则下，庄家可以抽取的点数为17到26，所有能组合起来的情况非常繁多，我们可以编写一个程序来获得整个区间上所有可能的取牌顺序并进行统计。
+
+这里我使用一个递归的方式来实现这个问题。考虑一个简单的方法，从一个数值开始进行取牌，每次取牌可以取1~10中的任一点数，然后再次调用这个函数进行下一轮的取牌，直到取牌的总点数超过26.
+
+```python
+from collections import Counter
+
+def generate_cases(start_score=0, picked_cards=[]):
+    if start_score >= 17:
+        return [picked_cards] # 超过17分，结束取牌，返回取牌序列
+    all_cases = []
+    for next_card in range(1, 11):
+        # 利用copy避免各分支间互相影响
+        temp_picked_cards = picked_cards.copy() 
+        temp_picked_card_score = start_score
+        temp_picked_cards.append(next_card) 
+        temp_picked_card_score += next_card
+        all_cases.extend(generate_cases(temp_picked_card_score, temp_picked_cards))
+    return all_cases
+
+all_cases = generate_cases()
+
+point_counter = Counter([sum(case) for case in all_cases if sum(case) <= 26])
+
+for point, count in point_counter.items():
+    print(f"最终牌面为{point}的情况有{count}种可能")
+```
+
+执行这段程序，它会输出从17到26这10个点数，各有多少种可能的取牌顺序。注意，这里我们只考虑到了点数，并没有区分顺序，如果你需要区分顺序，上面的程序应该满足你的要求，但注意运行可能需要花费一些时间。
+
+在黑杰克中，面值为2-10的牌各有4种（梅花、方块、红桃、黑桃），而面值为10的牌有16种（10、J、Q、K各有4种）。这样，一副牌包含4x9+16=52张牌。同时，A可以作为1或者11使用。
+
+定义两个基本函数
+对问题的分析，下面我们将这个问题分为两个部分来处理，首先我们需要一个函数来模拟抽取一张牌，另一个函数来计算庄家从已有点数抽取一张牌后的新点数。
+
+一. drawCard() - 模拟抽取一张牌
+为了模拟抽取一张牌，我们将所有的牌分为两类，一类是面值为10的，总共有16张，另一类是面值为1到9的，各4张，总共36张。因此，抽到面值为10的概率为16/52=0.307692，抽到面值为1到9的每个面值的概率为4/52=0.076923。
+
+我们使用这个概率来生成牌的点数。
+
+    
+python
+插入代码
+复制代码
+import random
+
+def drawCard():
+  p10 = 16/52
+  p_rest = 4/52
+  r = random.random()
+  if r < p10:
+    return 10
+  elif r < p10 + 9 * p_rest:
+    return int((r - p10) / p_rest) + 1
+  else:
+    return 11   # Ace
+
+    
+二. dealer_prob(start_score) - 计算庄家从当前点数开始抽牌，最终得到各个点数的概率。
+为了计算庄家从当前点数开始抽牌，得到各个点数的概率，我们首先假设庄家的点数小于17，那么庄家会抽牌。每抽到一张牌，我们就根据牌的点数更新庄家的得分，然后递归地计算下一步的概率。
+
+我们定义一个数组prob来存储从当前点数开始，抽牌后得到的各点数的概率。初始的22个元素都设置为0（因为在黑杰克中，最大点数为21）。
+
+然后，我们根据上面介绍的抽卡函数，计算各个下一步的概率。
+
+    
+python
+插入代码
+复制代码
+def dealer_prob(start_score):
+    prob = [0]*22
+    if start_score >= 17:
+        prob[start_score] = 1
+    else:
+        for next_card in range(1, 11):
+            temp_prob = dealer_prob(start_score + next_card)
+            if next_card == 1:
+                prob = [p+1/13*q for p,q in zip(prob, temp_prob)] 
+            elif next_card == 10:
+                prob = [p+16/52*q for p,q in zip(prob, temp_prob)]
+            else:
+                prob = [p+4/52*q for p,q in zip(prob, temp_prob)]
+    return prob
+
+    
+最后，我们可以计算出从2点（最小）到21点（最大）的概率：
+
+    
+python
+插入代码
+复制代码
+for score in range(2, 22):
+    print(f"得分为{score}的概率为：{dealer_prob(score)}")
+
+    
+以上方法只能计算从一个特定点数开始，抽牌后可能得到的各点数的概率。真正的游戏中，庄家的起始点数也是有概率的，因此，要得到最终点数的概率，还需要结合起始点数的概率进行计算。
+
+关于“有哪些情况可以到达这个点数”，由于游戏中牌的顺序并不影响点数，所以很难列出每种可能性。而且，随着抽出的牌数的增加，可能性会呈指数级增长。
