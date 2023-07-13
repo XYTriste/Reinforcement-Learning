@@ -100,4 +100,21 @@ A网络如何进行更新？
    $$
    \frac{f(Y-Z)-0}{X}=
    $$
-   
+
+## 7.13
+
+最初使用的方式为:
+
+```
+ s_prime, extrinsic_reward, done, _, _, = env.step(action)
+action_numpy = np.full((2,), action)
+state_action = np.vstack((state, action_numpy))
+state_action = torch.from_numpy(state_action).float().unsqueeze(0)
+state_action = state_action.reshape(-1)
+record, target = net(state_action)
+coff = net.learn(state_action, record, target)
+
+reward_weight = 0.01 + coff * (0.1 - 0.01)
+```
+
+但是效果非常差，考虑到环境。
