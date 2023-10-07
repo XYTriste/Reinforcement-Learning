@@ -580,3 +580,292 @@ Widget& Widget::operator=(const Widget& rhs){
 
 - 拷贝函数（包含拷贝构造函数以及拷贝赋值运算符等）应该确保复制“对象内的所有成员变量”以及“所有基类的成分”
 - 不要尝试以某个拷贝函数实现另一个拷贝函数，应该将它们共同的部分放入某个私有成员函数中，并由两个函数共同调用。
+
+## 13. 以对象管理资源
+
+假设我们创建了一个基类，名为`Investment`。随后，在该类中创建一个工厂函数（factory function）用于供应一个特定的`Investment`对象：
+
+```cpp
+class Investment{
+	public:
+        ...
+        static Investment* createInvestment();
+}
+```
+
+随后，用户在使用该类的过程中通常会编写这样的代码:
+
+```cpp
+int main(){
+	Investment *ptr = Investment.createInvestment();
+	...  //其他逻辑代码，业务处理等。
+	delete ptr;
+	return 0;
+}
+```
+
+通常情况下这是正常的，但是如果在`...`语句块中发生了异常呢？或者一个意外的`return`导致函数提前结束了，这些情况都会使得`delete ptr`得不到合适的调用，继而引发内存泄漏。
+
+如何解决这个问题呢？<font color="red">为了确保由`createInvestment`函数返回的资源得到释放，我们需要将资源放进对象内。当使用了`ptr`对象的函数结束时，类对象的析构函数将调用以自动释放资源。</font>
+
+### auto_ptr
+
+`auto_ptr`是由标准库中提供的一种类指针(pointer-like)对象，也是智能指针的一种。该类对象的析构函数调用时，也将自动对其所指向的对象调用`delete`。
+
+因此改写后的代码如下:
+
+```cpp
+int main(){
+	std::auto_ptr<Investment> ptr(createInvestment());
+	...
+	return 0;
+}
+```
+
+由于`auto_ptr`在析构时会`delete`它所指向的对象资源，因此不要让多个`auto_ptr`指向同一个对象，否则会引发未知的错误。
+
+此外，如果对`auto_ptr`调用拷贝构造或拷贝赋值运算符，则会将原`auto_ptr`指向的对象"传递"给新的`auto_ptr`，而原`auto_ptr`则会指向`null`。
+
+<font color="red">上述的问题意味着`auto_ptr`并不是管理动态分配资源的好手段，尤其是在我们需要复制资源的情况下。比如STL容器通常要求对象拥有“正常的”复制行为，因此STL中容不下`auto_ptr`。</font>
+
+### shared_ptr
+
+`auto_ptr`的替代方案，则是引用计数型智能指针(reference-counting smart pointer，RCSP)。顾名思义，RCSP会持续追踪有多少个对象指向同一资源，且只有在没有对象指向该资源时才将资源释放。它的行为类似于垃圾回收，只有没人要的东西才被定义为垃圾并进行回收。缺点在于，它受到环状引用的限制，若两个RCSP互相指向对方所指向的对象，则引用计数始终存在，继而引发内存泄漏。
+
+```cpp
+#include <memory>
+
+class Node {
+public:
+    std::shared_ptr<Node> next;
+
+    Node() {
+        std::cout << "Node created" << std::endl;
+    }
+
+    ~Node() {
+        std::cout << "Node destroyed" << std::endl;
+    }
+};
+
+int main() {
+    std::shared_ptr<Node> node1 = std::make_shared<Node>();
+    std::shared_ptr<Node> node2 = std::make_shared<Node>();
+
+    // 形成环状引用
+    node1->next = node2;
+    node2->next = node1;
+
+    // 引用计数不会降为零，内存泄漏
+    return 0;
+}
+```
+
+- 为了防止资源泄漏，请使用RAII（资源取得时即初始化，Resource Acquisition is Initialization）对象，它们在构造函数中获得资源并在析构函数中释放资源。
+- 两个常被使用的RAII class分别是`auto_ptr`和`shared_ptr`。后者通常是更好的选择，因为其复制行为相较于`auto_ptr`更加"正常"。若选择`auto_ptr`，复制动作会使它指向null。
+
+## 14. 在资源管理类中小心copying行为
+
+有时候我们创建的类对象是复杂的，简单的使用智能指针进行资源管理可能非常麻烦。在这样的条件下，我们可能需要自定义一个资源管理类。
+
+假设我们创建了一个互斥器类`Mutex`，并使用两个函数来锁定与解锁该类对象：
+
+```cpp
+void lock(Mutex* pm);
+void unlock(Mutex* pm);
+```
+
+为了确保不会忘记解锁每一个被锁定的`Mutex`，我们可以建立一个class来管理锁定与解锁，该类遵循RAII守则，即“资源在构造期间获得，在析构期间释放”：
+
+```cpp
+class Lock{
+	public:
+		explicit Lock(Mutex* pm): mutexPtr(pm){
+			lock(mutexPtr);
+		}
+		~Lock(){ unlock(mutexPtr); }
+	private:
+		Mutex *mutexPtr;
+}
+```
+
+用户在使用过程中也符合RAII的方式:
+
+```
+Mutex m;
+...
+{	// 建立一个代码块用来定义临界区(critical section)
+	Lock m1(&m);	// 锁定互斥器
+	...				// 执行操作
+}					//代码块结束，Lock的析构函数调用，释放互斥器的锁。
+```
+
+这样很不错，但是如果Lock对象被复制，会发生什么事？
+
+```cpp
+Lock m1(&m);
+Lock m2(m1);
+```
+
+通常情况下对于这样的事情，我们有两种可能的处理方式：
+
+1. 禁止复制：有时候允许RAII对象复制并不合理，例如对于Lock这样的类而言，通常不会拥有合理的"同步原语"（Synchronization Primitives）的副本。如果复制动作不合理，则应该将copying操作设置为private来阻止复制。
+2. 对底层对象使用“引用计数”法：有时候我们希望保有资源，直到其最后一个使用者被销毁。这种情况下使用RAII对象时，应该将该资源的“被引用数”递增。因此可以使用`shared_ptr`。
+
+​		如果前述的Lock想要使用引用计数，则需要改变`mutexPtr`的类型，将其改为`std::shared_ptr<Mutex>`。
+
+然而，`shared_ptr`对象的默认行为是“当引用计数为0时删除其所指物”，那并不是我们希望锁所做的事。我们希望`shared_ptr`的析构动作是释放锁定而不是删除。
+
+因此，我们需要对`shared_ptr`指定其删除器，删除器是一个函数或者函数对象，当引用计数为0时自动调用删除器。我们可以对`shared_ptr`提供第二个参数来指定其删除器：
+
+```cpp
+class Lock{
+	public:
+		explicit Lock(Mutex* pm): mutexPtr(pm, unlock){ //注意这里的成员列表初始化语句指定了第二个参数
+			lock(mutexPtr.get());
+		}
+	private:
+		std::shared_ptr<Mutex> *mutexPtr;
+}
+```
+
+- 复制RAII对象必须一并复制它所管理的资源，所以资源的copying行为决定RAII对象的copying行为。
+- 普遍而常见的RAII class的copying行为是：抑制copying、使用引用计数法，不过其他行为可能也被实现。
+
+## 15. 在资源管理类中提供对原始资源的访问
+
+没太多能说的，字面意思。
+
+- API往往要求访问原始资源，所以每一个RAII class应该提供一个“取得其所管理资源”的办法。
+- 对原始资源的访问可能经由显式转换或隐式转换，一般而言显式转换更加安全，但是隐式转换对用户而言更加方便。
+
+## 16.成对使用new和delete时要采取相同的形式
+
+也没太多能说的，无非是new对象和new对象组成的数组时，需要分别使用delete和delete []进行释放。
+
+- 如果你在new表达式中使用[]，必须在相应的delete表达式中也使用[]。如果你在new表达式中不使用[]，一定不要在相应的delete表达式中使用[]。
+
+## 17. 将通过`new`创建的对象存储在独立的语句中的智能指针中。
+
+假设我们创建了一个函数，该函数用来表明处理程序的优先权。另一个函数在动态分配所得的`Widget`上进行带有优先权的处理：
+
+```cpp
+int priority();
+void processWidget(std::shared_ptr<Widget> pw, int priority);
+```
+
+现在考虑调用`processWidget`：
+
+```cpp
+processWidget(new Widget, priority());
+```
+
+事实上，这样的代码不能通过编译。因为`shared_ptr`类的构造函数声明是`explicit`的，因此无法通过创建`Widget`并隐式转换为智能指针的方式来传递参数。
+
+以下代码可以通过编译:
+
+```cpp
+processWidget(std::shared_ptr<Widget>(new Widget), priority());
+```
+
+然而，上述代码可能造成内存泄漏。原因如下：
+
+编译器在产生`processWidget`的实际调用之前，必须首先核算它的各个参数。上述调用的第二个参数是一个简单的函数调用，第一个语句则是由`std::shared_ptr<Widget>`和`new Widget`复合而成。
+
+也就是说，在实际调用`processWidget`之前，还有这些事需要做：
+
+1. 创建一个`Widget`对象，即`new Widget`。
+2. 创建一个`shared_ptr`对象，即`std::shared_ptr<Widget>(new Widget)`。
+3. 调用`priority()`函数。
+
+C++中保证1一定会在2之前被调用，因为创建智能指针对象依赖于第1条语句。然而，对于函数`priority`的调用却并不一定排在创建智能指针后，C++中并不保证上述三件事一定按顺序执行。比如，可能产生如下的序列：
+
+1. 创建一个`Widget`对象，即`new Widget`。
+2. 调用`priority()`函数。
+3. 创建一个`shared_ptr`对象，即`std::shared_ptr<Widget>(new Widget)`。
+
+在这样的情况下，如果调用`priority()`函数过程中<font color="red">抛出</font>了异常，会发生什么事？注意这里的情况是抛出，如果`priority`函数能够处理这样的情况并正常返回，那么不会出现问题。但是如果抛出了异常，则`new Widget`返回的指针将无法被置入智能指针中，这部分的内存将会发生泄漏。
+
+避免这样的问题的方法就是本知识点的主题，使用分离语句将通过`new`创建的对象存储在独立的语句中的智能指针中。
+
+```cpp
+std::shared_ptr<Widget> pw(new Widget);
+processWidget(pw, priority());
+```
+
+- 以独立语句将通过new创建的对象存入智能指针内。如果不这样做，一旦异常被抛出，则可能导致难以察觉的资源泄漏。
+
+## 18.让接口容易被正确使用，不易被误用
+
+这部分内容看书更合适，写起来非常麻烦。
+
+- 好的接口很容易被正确使用，不容易被误用。你应该在你的所有接口中努力达成这些性质。
+- “促进正确使用”的办法包括接口的一致性，以及与内置类型的行为兼容。
+- “阻止误用”的办法包括建立新类型、限制类型上的操作、限定对象的值范围、以及消除客户的资源管理责任。
+- shared_ptr支持自定义删除器，这可以防范DLL问题，可以用来自动解除互斥锁等等。
+
+## 19. 设计class犹如设计type
+
+同上述，都是文字内容，看书。
+
+- class的设计就是type的设计。在定义一个新的type之前，请确定已经考虑过书中本条款覆盖的所有讨论主题。
+
+## 20. 相较于pass-by-value，请偏向使用pass-by-reference-to-const
+
+简而言之，如果我们在某个函数中使用对象的属性，但是我们无需对对象本身的属性进行修改时，尽量使用传递const引用的方式而不是传递值的方式。因为传值意味着调用对象的拷贝构造函数，这可能非常耗时。
+
+- 尽量以pass-by-reference-to-const替代pass-by-value。前者通常比较高效，并可以避免父类引用指向子类对象引起的切割属性问题。
+- 上述规则并不适用于内置类型，以及STL的迭代器和函数对象。对它们而言，pass-by-value往往更加妥当。
+
+## 21.必须返回对象时，不要试图返回其引用
+
+首先，任何函数如果返回一个指向函数内局部变量的引用。由于局部对象作用域结束后立即调用析构函数，因此引用将会指向一个无意义的区域，这样的引用显然是无用的。
+
+其次，如果返回的是堆上分配的内存，即指针指向的内存呢？（指针指向的堆内存不受到函数作用域的影响）
+
+```cpp
+const Ref& operator*(const Ref& lhs, const Ref& rhs){
+	...
+	Ref *ptr = new Ref(lhs.n * rhs.n, lhs.d * rhs.d);
+	return *ptr;
+}
+```
+
+此时，函数可以正确的返回一个针对`*ptr`对象的引用。然而，我们无法对这样分配的内存进行delete。换句话说，在函数调用结束后，我们无法通过引用得到引用指向的那个指针，继而无法销毁这部分的内存。
+
+更有趣的一件事是，我们能不能使用`static`变量来克服这个问题呢？
+
+乍一看好像是可行的，首先static使得变量不受作用域的影响，因此无需考虑对象被析构的问题。其次static变量仍然处于栈内存中，因此无需像动态管理的堆内存那样进行手动分配和释放。
+
+然而...
+
+```cpp
+const Ref& operator*(const Ref& lhs, const Ref& rhs){
+	...
+	static Ref result;
+	result = ...;
+	return result;
+}
+```
+
+假设有这样的调用:
+
+```cpp
+Ref a, b, c, d;
+if((a * b) == (c * d)){	//假设Ref类的==运算符已定义
+	...
+}else{
+    ...
+}
+```
+
+这样的调用结果将始终执行`if`语句的内容，也就是说`(a * b) == (c * d)`始终为真。
+
+道理很简单，无论是==运算符的左边还是右边返回的都是引用。而且是针对同一个对象的匿名引用，因此这个表达式的结果始终为真。
+
+总之，<font color="red">当你必须在返回一个reference和返回一个object之间进行抉择时，你的工作就是挑选行为正确的那个。</font>
+
+- 绝不要返回指针和引用指向一个局部栈对象，或者返回一个指向堆分配的内存的引用，或者返回一个指向局部静态变量的指针或引用。
+
+## 22. 将成员变量声明为private
+
