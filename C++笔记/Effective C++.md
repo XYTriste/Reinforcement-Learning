@@ -869,3 +869,408 @@ if((a * b) == (c * d)){	//假设Ref类的==运算符已定义
 
 ## 22. 将成员变量声明为private
 
+首先，从语法一致性的角度来说。如果成员变量不是public，客户唯一能够访问对象的方法就是通过成员函数。如果public接口内的每样东西都是函数，客户就不需要在打算访问class成员时试着记住是否应该使用小括号了。
+
+> "是否应该使用小括号" 这部分的意思是，当客户使用类的公有接口来访问类的成员时，客户需要调用类的方法（成员函数），并且在调用方法时需要使用小括号（即函数调用操作符）。这是因为方法实际上是通过函数来实现的。
+>
+> 举个例子，假设有一个类 `MyClass`，其中有一个公有方法 `doSomething()`，客户如果想要使用这个方法来执行某些操作，可以这样做：
+>
+> ```cpp
+> MyClass myObject;  // 创建一个类的对象
+> 
+> // 调用 doSomething() 方法，需要使用小括号
+> myObject.doSomething();
+> ```
+>
+> 在这个例子中，`doSomething()` 是一个方法，客户必须使用小括号来调用它。这就是 "是否应该使用小括号" 这部分的含义，它强调了客户在使用类的公有接口时需要调用方法（使用小括号），而不是直接访问成员变量。这有助于保持接口的一致性和清晰性。
+
+更重要的是，如果将成员变量声明为非private的，可能会破坏其封装性。
+
+考虑一个修饰为public的成员变量，用户可能在任何地方修改它（包括用户自己编写的业务代码以及用户派生出的类中），如果类的创建者对该成员变量进行了修改（改名、改变其类型或别的操作），用户代码中任何涉及到该成员变量的部分可能都会遭到破坏。
+
+protected成员变量同样如此，即使它在类外不可见。我们仍然无法阻止用户派生出一个类并修改这个变量的值。
+
+只有通过private进行修饰的成员变量可以防止以上的问题，用户只能通过public成员函数间接的访问或者使用成员变量。即便因为功能上的调整类的创建者修改了成员变量，用户也几乎无需进行任何调整。
+
+- 切记将成员变量声明为private。这可赋予客户访问数据的一致性、可细微划分访问控制、允诺约束条件得到保证，并给予类的创建者足够多的灵活性。
+- protected并不比public更具有封装性。
+
+## 23. 相较于成员函数，最好用非成员函数、非友元函数替代它
+
+考虑一个用来表示网页浏览器的类:
+
+```cpp
+class WebBrowser{
+	public:
+		...
+		void clearCache();
+		void clearHistory();
+		void removeCookies();
+		...
+};
+```
+
+假设用户希望使用该类来实现一个无痕访问的浏览器，那么在关闭浏览器时就需要调用上述三个函数。通常情况下有两种做法，将三个函数的调用作为一个成员函数，或作为一个非成员函数：
+
+```cpp
+class WebBrowser{
+	public:
+		...
+		void clearEverything();
+		...
+};
+or...
+void clearBrowser(WebBrowser& wb){	//这是非成员函数
+	wb.clearCache();
+	wb.clearHistory();
+	wb.removeCookies();
+}
+```
+
+面向对象的守则告诉我们，数据以及操作数据的函数应该捆绑在一起。因此似乎使用成员函数的方法更好。
+
+然而，这是对于面向对象封装思想的一个误解。将该函数作为成员函数会在一定程度上降低类的封装性。
+
+考虑成员函数可以访问类的私有变量，如果我们为了这样的功能多去定义一个成员函数。那么该成员函数可能、或者说有机会访问到私有的成员变量。将该函数作为非成员函数则不会有这个问题。
+
+<font color="red">但是，这并不意味着“对于该类成员函数进行调用的非成员函数，不能是其他类的成员函数”。</font>
+
+针对友元函数也是同样的道理，友元函数是非成员函数，然而友元函数同样可以访问类的私有成员变量。因此使用友元函数来调用`WebBroswer`的成员函数的方式同样在一定程度上会破坏类的封装性。
+
+- 宁愿以非成员 非友元函数来替换成员函数，这样做可以增加封装性、包装灵活性以及机能扩展性。
+
+## 24. 若所有参数都需要类型转换，请为此采用非成员函数
+
+考虑一个有理数类：
+
+```cpp
+class Rational{
+	public:
+		Rational(int numerator=0, int denominator = 1); // 构造函数没有声明explicit，即允许进行隐式类型转换
+		int numerator() const;
+		int denominator() const;
+	private:
+		...
+};
+```
+
+很自然的，我们希望一个分数能够和一个整数进行加减乘除。假设我们想要实现分数和整数的相乘操作，实现一个`operator*`的成员函数版本:
+
+```cpp
+class Rational{
+	public:
+		...
+		const Rational operator*(const Rational& rhs) const;
+	private:
+		...
+};
+```
+
+此时我们可以轻松的将两个有理数相乘，并不会导致任何问题。但是，考虑如下调用：
+
+```cpp
+Rational result, oneHalf(1, 2);
+result = oneHalf * 2;	//没问题
+result = 2 * oneHalf;	//错误！
+```
+
+第二行没有问题的原因在于，由于我们提供了`Rational`类的`operator*`函数并提供了一个非`explicit`的构造函数。当我们尝试将2传递给`operator*`函数的形参时，会发生隐式类型转换。因此该调用仍然可以正常运行。
+
+而第三行的问题在于，2作为了"承载成员函数`operator=*`调用的函数，也就是将2作为`this`来调用`this.operator*(oneHalf)`"。由于`2`很显然是一个内置类型`int`，因此不存在相应的重载`operator*`。更重要的是，这说明了C++不会为`this`调用隐式转换。
+
+结论是，只有当参数位于参数列表中时，它才是一个隐式转换的参与者。而作为承载函数调用的`this`，它是一个隐喻式的参数，不在参数列表内，因此不参与隐式转换。
+
+那么，如果我们不使用成员函数的版本，而是将`opeartor*`作为非成员函数进行重载呢？
+
+```cpp
+class Rational{
+	...
+};
+const Rational operator*(const Rational& lhs, const Rational& rhs){
+	return Rational(lhs.numerator() * rhs.numerator(),
+					lhs.denominator() * rhs.demominator());
+}
+Rational oneFourth(1, 4);
+Rational result;
+result = oneFourth * 2;	//仍然没问题
+result = 2 * oneFourth; //现在可以通过编译
+```
+
+一切大功告成了，现在可以正常的使用这个类了。
+
+最后一个值得商榷的问题是，即使是非成员函数，`operator*`应该是`Rational`类的友元吗？
+
+答案是否定的，一个函数是否应该成为类的友元，其<font color="red">决定性的因素在于，该函数内是否需要对类成员的数据进行修改操作等。</font>在上面这个例子中，`operator*`函数籍由`Rational`类的公有接口即可胜任工作。前面也提到过，友元会破坏一个类的封装性，因此在没有必要的情况下，不应该让这样的函数成为友元。
+
+- 如果你需要为某个参数的所有参数(包括this指针指向的隐喻式参数)进行类型转换，那么这个函数必须是非成员函数。
+
+## 25. 考虑写一个不抛异常的swap函数
+
+首先，我们需要了解什么是全特化，什么是偏特化：
+在C++中，模板特化是指为模板类型参数的特定值或范围提供自定义实现的机制。有两种主要类型的模板特化：全特化（full specialization）和偏特化（partial specialization）。
+
+1. **全特化（Full Specialization）**：
+   - 全特化是指为模板类型参数提供完全特定的实现。
+   - 在全特化中，你为模板的每个类型参数都提供了一个具体的实现。
+   - 通常用于处理模板参数的特殊情况，以提供高度定制的行为。
+   - 例如，你可以为模板类创建完全特化的版本，以处理特定类型的数据。
+
+```cpp
+template <typename T>
+class MyClass {
+    // 通用实现
+};
+
+// 全特化的版本，处理 int 类型的参数
+template <>
+class MyClass<int> {
+    // int 类型的定制实现
+};
+```
+
+2. **偏特化（Partial Specialization）**：
+   - 偏特化是指为模板类型参数的某些特定值或模式提供自定义实现。
+   - 在偏特化中，你只特定了模板的某些部分，而不是全部。
+   - 偏特化通常用于处理一类类型的参数，而不仅仅是一个特定的类型。
+   - 例如，你可以为容器模板创建偏特化版本，以处理不同大小的容器。
+
+```cpp
+template <typename T, typename U>
+class Pair {
+    // 通用实现
+};
+
+// 偏特化的版本，处理包含指针的 Pair
+template <typename T>
+class Pair<T, T*> {
+    // 处理包含指针的 Pair 的定制实现
+};
+```
+
+总之，模板特化允许你为不同类型或模式的模板参数提供不同的实现，以满足特定的需求。全特化涵盖所有类型参数，而偏特化专注于一组类型参数或特定模式。
+
+<font color="red">一言以蔽之，全特化指的就是如果我们的模板包含了3个模板类型（假设是T、A、B），我们将这三个模板类型全部指定为某个具体的类型（假设int、string、double），然后针对这三个具体类型提供一份模板类的实现。偏特化就是为其中部分模板类型提供具体类型，然后提供一份实现。</font>
+
+<font color="blue">在C++中，类模板可以进行全特化和偏特化。而函数模板只能进行全特化。注意，类的成员函数是类的一部分，因此不要将类的成员函数认为是函数模板。</font>
+
+> C++中的函数模板不能进行偏特化，这是语言规范的设计决策。函数模板的设计初衷是为了提供通用性和代码重用，而不是为了允许特定参数类型的偏特化。
+>
+> 函数模板的目的是在编译时生成通用的代码，可以用于不同的参数类型。偏特化会引入模板参数的局部修改，这会增加模板实例化的复杂性，并可能导致模板实例化的不一致性和困难。此外，C++语言设计者认为偏特化的需求可以通过函数重载、普通函数以及类模板的特化来满足，而不必引入函数模板的偏特化。
+>
+> 总之，C++中的函数模板不能进行偏特化，因为语言规范没有提供这个功能。如果需要根据特定的参数类型进行定制化的行为，可以使用函数重载或类模板的特化来实现。
+
+在默认情况下，swap动作可以由标准库中提供的swap算法完成：
+
+```cpp
+namespace std{
+	template<T>
+	void swap(T& a, T& b){
+		T temp(a);
+		a = b;
+		b = temp;
+	}
+}
+```
+
+只要类型T支持copying操作（拷贝构造以及拷贝赋值），默认的swap函数就可以应用于其上。
+
+而假设某个类中包含大量数据呢？例如：
+
+```cpp
+class WidgetImpl{
+	public:
+		...
+	private:
+		int a, b, c;
+		std::vector<int> v;
+};
+class Widget{
+    public:
+    	Widget(const Widget& rhs);
+    	Widget& operator=(const Widget& rhs){
+            ...
+                *pImpl = *(rhs.pImpl);
+            ...
+        }
+    	...
+    private:
+    	WidgetImpl *pImpl;
+};
+```
+
+从代码中我们可以看出，如果我们想要交换两个`Widget`对象值，实际上只要交换两个指针指向的对象即可。但是默认的`swap`函数并不知道这一点，它会创建一个临时的`Widget`，然后按照默认的方式将内容复制过去，效率非常低。
+
+为了解决这个问题，我们显然需要为我们的`Widget`类定制一个swap操作，这样的操作在C++中称为特化。准确来说：将std::swap针对Widget进行特化。
+
+```cpp
+namespace std{
+	template<>
+	void swap<Widget>(Widget &a, Widget &b){
+		swap(a.pImpl, b.pImpl);
+	}
+}
+```
+
+这是<font color="red">std::swap针对`Widget`类的一个全特化版本</font>，但是这段代码无法通过编译，因为`pImpl`是类的私有属性，我们无法在类外部访问它。友元是一种可行的方式，但是还有更好的办法。
+
+我们在`Widget`类中声明一个public成员函数做上述操作，然后令std::swap进行特化，调用该成员函数。
+
+```cpp
+class Widget{
+    public:
+    	void swap(Widget &other){
+    		using std::swap;
+    		swap(pImpl, other.pImpl);
+    	}
+    	...
+    private:
+    	WidgetImpl *pImpl;
+};
+namespace std{
+	template<>
+	void swap<Widget>(Widget &a, Widget &b){
+		a.swap(b);
+	}
+}
+```
+
+上述代码即可实现针对类的std::swap特化，从而完成交换的操作。
+
+但是，如果`Widget`以及`WidgetImpl`都是类模板，而不是具体的类呢？
+
+```cpp
+template<typename T>
+class Widget{
+	...
+};
+template<typename T>
+class WidgetImpl{
+	...
+};
+namespace std{
+    template<typename T>
+    void swap< Widget<T>>(Widget<T> &a, Widget<T> &b){
+        a.swap(b);
+    }
+}
+```
+
+可能我们以为只要像上面这样改写特化的代码，为其加上模板即可。
+
+然而，这段代码无法通过编译（有些编译器会让它通过，但是仍然是错误的），因为C++中不允许对函数模板进行偏特化（值得一提的是，函数模板偏特化似乎可以籍由函数重载做到类似的事）。
+
+那么，如果我们不对std::swap进行特化，而只是简单的提供一份针对std::swap的函数重载呢？
+
+```cpp
+namespace std{
+	template<typename T>
+	void swap(Widget<T> &a, Widget<T> &b){	//注意swap后没有<>，这是函数重载而不是函数特化
+		a.swap(b);
+	}
+}
+```
+
+这也是不行的，这段代码尝试将自定义的`swap`函数添加到`std`命名空间中，但C++标准禁止了在`std`命名空间中添加自定义函数或特化标准库的函数模板。这是为了防止与标准库产生冲突。
+
+最终，解决办法是，我们还是声明一个非成员函数`swap`让它调用成员函数`swap`。但是不再将其声明为std::swap的特化或者重载版本：
+
+```cpp
+namespace WidgetStuff{	//注意，这里并非std命名空间，因此这里的swap并不是std::swap的重载
+	...
+	template<typename T>
+	class Widget{...};
+	...
+	template<typename T>
+	void swap(Widget<T>& a, Widget<T>& b){
+		a.swap(b);
+	}
+}
+```
+
+这个做法对于类或者类模板都是行得通的，因此我们似乎应该采用这种方式。
+
+<font color="red">然而，如果我们希望我们的“class专属版`swap`”尽可能多的语境下被调用，我们应该提供它的非成员函数版本以及std::swap特化版本。</font>
+
+如果我们正在编写一个函数模板，并希望交换两个类的值，我们或许会编写如下代码：
+
+```cpp
+template<typename T>
+void doSomething(T& obj1, T& obj2){
+	using std::swap;
+	...
+	swap(obj1, obj2);
+	...
+}
+```
+
+编译器会查找适当的swap进行调用，如果针对类型T有具体的特化版本，且类型T以及特化版本所在的命名空间在该函数中“可见”。那么会优先调用特化版本，其次是非成员函数的版本（前提也是需要可见），如果找不到这些实现，那么最终会调用一般化的std::swap。
+
+- 当std::swap针对你的类型效率不高时，提供一个swap成员函数，并确定该成员函数不抛出异常。
+- 如果你提供一个成员函数swap，也该提供一个非成员函数swap来调用前者，对于类而非类模板，也请特化std::swap。
+- 调用swap时应该针对std::swap使用using声明式，然后调用swap且不带任何“命名空间修饰”。
+- 为“用户定义类型”进行std命名空间中的全特化是好的，但是不要尝试在std内加入任何东西（在std命名空间内提供std中的函数重载等）。
+
+## 26. 尽可能延后变量定义式出现的时间
+
+简而言之，如果我们有如下代码用于加密代码：
+
+```cpp
+std::string doSomething(std::string& password){ 
+	std::string encrypted;
+	if(password.length() < MinimumPasswordLength){
+		throw logic_error("Password is too short");
+	}
+	...	//加密部分
+	return encrypted;
+}
+```
+
+那么，这段代码在运行过程中可能从未使用过变量`encrypted`就抛出异常退出了，这样就多余了一次对于string对象的构造和析构的成本。这个例子中仅仅是string对象，因此构造和析构的成本并不高，但是如果是自定义的类对象，构造和析构的成本可能非常昂贵。
+
+如果改写成这样：
+
+```
+std::string doSomething(std::string& password){ 
+	
+	if(password.length() < MinimumPasswordLength){
+		throw logic_error("Password is too short");
+	}
+	std::string encrypted;
+	...	//加密部分
+	return encrypted;
+}
+```
+
+这样可以保证构造函数只有在必要的情况下调用，因此比前面的代码更加高效。
+
+然而，`encrypted`最初虽然获得了定义，但是没有得到任何初值，这意味着调用的是默认构造函数。随后我们在加密过程中给`encrypted`赋值，条款4中也解释了这样做非常低效。
+
+更合适的做法是调用拷贝构造函数:
+
+```
+std::string doSomething(std::string& password){ 
+	
+	if(password.length() < MinimumPasswordLength){
+		throw logic_error("Password is too short");
+	}
+	std::string encrypted(password);
+	...	//加密部分
+	return encrypted;
+}
+```
+
+这样调用拷贝构造函数来构造的方式，跳过了default构造函数的部分，使得代码更加高效。
+
+上面的例子意味着，你不止应该延后变量的定义，直到使用变量的前一刻，甚至应该延后这份定义直到能够给它初值实参为止。
+
+- 尽可能延后变量定义式的出现。这样做可以增加程序的清晰度并改善程序效率。
+
+## 27. 尽量少做转型动作
+
+理由很简单，转型很有可能导致代码带来错误的操作。
+
+- 如果可以，尽量避免转型，特别是在注重效率的代码中避免`dynamic_cast`。如果有个设计需要转型动作，试着发展无需转型的替代设计。
+- 如果转型是必要的，试着将它隐藏于某个函数背后。客户随后可以调用该函数，而不需要将转型放进它们自己的代码内。
+- 宁可使用C++ style（新式）转型，不要使用旧式转型。前者很容易辨识出来，而且也比较有着分门别类的功能。
+
+## 28. 避免返回handles指向对象内部成分
