@@ -1764,5 +1764,84 @@ class Derived: public Base<T>::Nested{ //Nested是一个嵌套从属名称，但
 - 声明template参数时，前缀关键字class和typename可互换。
 - 请使用关键字typename标识嵌套从属类型名称，但不得在基类列表或者成员初始值列表中将其作为修饰符。
 
+## 43. 学习处理模板化基类内的名称
 
+这一条款旨在说明，当我们继承一个模板基类时，我们不能在派生类的成员函数中直接调用模板基类中定义的函数（无论是虚函数还是非虚函数）。
+
+究其本因，先看一个例子：
+
+```cpp
+class ACompany{
+	public:
+		void foo(...);
+		void zoo(...);
+};
+class BCompany{
+	public:
+		void foo(...);
+		void zoo(...);
+};
+template<typename Company>
+class MsgSender{
+	public:
+		...
+		void sendfoo(){
+			Company c;
+			c.foo();
+		}
+    	void sendzoo(){
+			Company c;
+			c.zoo();
+		}
+};
+```
+
+假设A公司和B公司都需要发送信息的功能，使用一个模板基类来实现这些功能即可。调用时会根据模板参数类型进行匹配对应的函数进行调用。
+
+但是如果我们需要在发送信息的同时写日志呢？比较不好的实现方式是为`MsgSender`添加一个写日志的私有成员函数（这超出了`MsgSender`本身的功能，尽管用户感觉不到）或者定义一个日志类，然后让`MsgSender`私有继承它（也超出了它本身的功能，用户也感觉不到）。
+
+一种看上去较为合理的方式是继承`MsgSender`，并重写它的函数:
+
+```cpp
+template<typename Company>
+class LoggingMsgSender: public MsgSender<Company>{
+	public:
+		...
+		void sendfooMsg(){
+			//传送信息前写日志
+			sendfoo();
+			//传送信息后写日志
+		}
+    	void sendzooMsg(){
+            //与sendfooMsg做着类似的事
+        }
+};
+```
+
+看上去一切都好，但其实不然。编译器会拒绝`sendfoo`函数的调用，因为它找不到这个函数。
+
+原因是看上去我们虽然从基类中公有的继承（函数是公有的，继承也是公有继承）了这个函数，但是考虑这样的代码：
+
+```cpp
+template<>
+class MsgSender<ZCompany>{
+	public:
+		...
+		void foo();
+}
+```
+
+这是模板类`MsgSender`的一个全特化版本（所有的模板参数都已指定具体类型，因此是全特化），在这个特化的版本中，我们仅实现了`foo()`函数。这是因为我们假设它不应该具备`zoo()`函数的功能，这也是我们为`ZCompany`类型进行全特化的原因。
+
+那么问题就变得了然了，如果代码中存在像`ZCompany`这样的特化实现的话，对`zoo`函数的调用就是一个招致错误的行为。C++拒绝`sendfooMsg()`函数中调用的行为正是因为<font color="red">它知道模板基类有可能被特化，而特化版本中可能提供了和模板基类不一致的接口，因此它拒绝在模板基类中寻找继承而来的名称。</font>
+
+问题既然已经发觉，那么如何解决呢？C++中提供了几种方式：
+
+1. 使用`this->sendfoo`，这明确告诉编译器“我要使用本类中定义（其实是继承而来的）的那个sendfoo函数。”
+2. 使用`using`声明式，在类的public区域声明`using MsgSender::sendfoo`。这将告诉编译器去对应的作用域内查找这个函数。
+3. 第三种则是不使用`using`声明，而是直接使用`MsgSender::sendfoo`。
+
+- 可在派生类模板内通过`this->`引用模板基类内的成员名称，或者一个明确写出的“基类资格修饰符“完成。
+
+## 44. 将与参数无关的代码抽离模板
 
