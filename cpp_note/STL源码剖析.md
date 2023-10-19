@@ -299,32 +299,56 @@ class simple_alloc{
 
 第二层配置器针对上述问题做出了一些措施。如果要求分配的大小大于`128bytes`，那么就移交第一层配置器进行处理（说明申请的不是小块内存，不容易产生内存碎片等问题，因此第一层配置器足以处理）。反之，要求分配大小小于`128bytes`时，则移交`Memory Pool`进行处理。
 
-`Memory Pool`是如何进行内存管理的？我的理解是，它向系统申请了一块内存(比如`128bytes`)，在这块内存上维护一个自由链表。自由链表通常由一个`union`构成：
+`Memory Pool`究竟是如何管理内存的？我将尝试用自己的方式进行解释。
+
+首先，这种方法又被称为次级配置：每次配置一大块内存，并且维护与之对应的自由链表。下次若有小块的内存申请，则直接从自由链表中拨出内存分配，如果释放了小块内存，则同样将其归还到自由链表中。
+
+此外，为了方便管理，第二层配置器还会将任何小额区块的内存申请数量与8对齐（例如要求`30bytes`，实际分配`32bytes`）。
+
+第二层配置器总共维护了16个自由链表，它们各自维护的大小分别从8、16、24、...、128，自由链表的节点结构如下：
 
 ```cpp
 union obj{
 	union obj* free_list_link;
 	char client_data[1];
-};
+}
 ```
 
-由于64位系统上指针占8个字节，我们可以据此得到自由链表的大小:
+<font color="red">下述内容详细代码在P61，这里按理解进行筛选讲解。</font>
+
+当我们实现一个第二层配置器时，首先我们需要进行上述所说的内存对齐（这与机器有关，32位机器上使用4字节对齐，64位机器上则时8字节对齐）：
 
 ```cpp
-enum {__ALIGN = 8};
-enum {__MAX_BYTES = 128};
-enum {__NFREELISTS = __MAX_BYTES / __ALIGN} // free-list中节点个数
+enum {__ALIGN = 8}; // 小块内存对齐的标准
+enum {__MAX_BYTES = 128};	//	小块内存的上限
+enum {__NFREELISTS = __MAX_BYTES / __ALIGN};	//	维护的自由链表个数
 ```
 
-然后，我们根据计算出的大小，向系统申请一块内存(`128bytes`):
+已知了自由链表的个数，我们就可以定义指针数组，每个元素都是一个自由链表的头节点，分别指向了不同大小的内存块：
 
 ```cpp
-static obj* volatile free_list[__NFEELISTS];
+static obj* volatile free_list[__NFREELISTS];
 ```
 
-由于数组中相邻位置元素在内存地址上也是相邻的，又因为每个元素都是一个`obj*`，因此我们可以推断出每个元素的大小为8字节。或者说，第一个元素表示申请到内存的前8个字节，第二个元素表示申请到内存的第9到16个字节，以此类推。
+例如，`free_list[0]`就可以表示为一个自由链表的头节点，它负责维护一个"每个节点均为8字节大小"的自由链表，而`free_list[2]`就可以表示一个"每个节点均为24字节大小"的自由链表，以此类推。
 
-当我们要求一块63个字节的内存时，我们依据此函数来计算使用第几个节点：
+据此，我们可以使用该函数来计算每次申请内存时，实际分配的字节数：
+
+```cpp
+static size_t ROUND_UP(size_t bytes){
+	return (((bytes) + __ALIGN - 1) & ~(__ALIGN - 1));
+}
+```
+
+> 这个函数的功能是将给定的 `bytes` 向上舍入到最接近的较大的、满足特定对齐要求的值，并返回结果。
+>
+> 具体来说，函数的功能如下：
+>
+> 1. `(bytes) + __ALIGN - 1`：首先，将 `bytes` 与特定对齐值 `__ALIGN` 相加，并减去1。这一步的目的是将 `bytes` 向上舍入到最接近的较大的满足对齐要求的值。
+> 2. `& ~(__ALIGN - 1)`：接下来，使用位掩码 `~(__ALIGN - 1)` 对结果进行按位与运算。位掩码的目的是将结果的最后 `__ALIGN` 位设置为零，从而确保对齐要求得到满足。这将确保 `bytes` 被向上对齐到 `__ALIGN` 的倍数。
+> 3. 最终，函数返回向上舍入的结果，以满足特定的对齐要求。
+
+已知了我们需要的内存大小，我们就可以据此知道去哪个自由链表中申请合适大小的内存了：
 
 ```cpp
 static size_t FREELIST_INDEX(size_t bytes){
@@ -332,4 +356,115 @@ static size_t FREELIST_INDEX(size_t bytes){
 }
 ```
 
-据此，我们计算得到我们应该使用`free_list[7]`的节点，分配64个字节（从`free_list[0]`到`free_list[7]`）给用户，分配之后的自由链表可用节点从`free_list[8]`开始。
+这将计算我们所需要的内存大小在第几个自由链表中进行申请。
+
+特别说明的是，为什么自由链表的节点采用`union`？这是因为在一个`union`中，不论包含了多少个成员，它们同时只能存在一个有效值。且所有成员的起始地址相同。而在作为自由链表的节点时，未进行分配时我们使用`free_list_link`指向另一个节点形成链表。而当我们取出了一个节点时，我们就不再使用它的`free_list_link`了，表明这个节点已经分配给用户使用。
+
+> 你的描述关于`Memory Pool`和第二层配置器是非常清晰的。以下是我对你描述的几点补充和建议：
+>
+> 1. **次级配置器的目的**：你提到了次级配置器的工作原理，但可以进一步强调它的目的是为了提高小块内存的分配和回收效率。传统的内存分配器可能在处理大量小块内存请求时效率不高，而次级配置器通过预先分配大块内存并维护自由链表来解决这个问题。
+>
+> 2. **对齐的重要性**：你提到了内存对齐，这是非常重要的。对齐可以确保内存访问的速度和效率，特别是在某些硬件平台上，未对齐的内存访问可能会导致性能下降或其他问题。
+>
+> 3. **`union`的使用**：你对`union`的描述是正确的。使用`union`确实是为了在不同的情境下复用同一块内存，既可以作为链表节点，也可以作为用户数据存储。这种设计是为了节省内存和提高效率。
+>
+> 4. **代码注释**：你的代码注释非常有助于理解代码的功能，特别是对于`ROUND_UP`和`FREELIST_INDEX`函数的解释。这样的注释可以帮助读者更快地理解代码的目的和工作原理。
+>
+> 总的来说，你的描述是非常详细和准确的，为读者提供了一个清晰的视角来理解`Memory Pool`和第二层配置器的工作原理。
+
+#### 2.2.7 空间配置函数allocate()
+
+这部分实际上就是刚才描述第二层分配器的具体实现，具体代码在P62。
+
+此函数首先判断要求的内存大小，大于128字节则交给第一层配置器调用。小于128字节则计算用于分配内存的自由链表的下标。如果对应的链表中已经没有可用节点（没有合适的内存了），则调用`refill(ROUND_UP(n))`函数来重新填充对应的自由链表（refill的实现等会说）。如果节点可用，则取出该节点，并将指针指向该链表中的下一个节点（有点像头插法，但是是“头取”）。
+
+```cpp
+static void * allocate(size_t n){
+	obj * volatile * my_free_list;
+	obj * result;
+	
+	if(n > (size_t) __MAX_BYTES){
+		return (malloc_alloc::allocate(n));
+	}
+	my_free_list = free_list + FREELIST_INDEX(n);
+	result = *my_free_list;
+	if(return == nullptr){
+		void *r = refill(ROUND_UP(n));
+		return r;
+	}
+	*my_free_list = result->free_list_link;
+	return result;
+}
+```
+
+#### 2.2.8 空间释放函数deallocate()
+
+与`allocate()`类似，回收时它遵循着同样的原则。如果回收的内存块大于128字节，则交由第一层配置器回收，否则将其交还给对应的`free_list`。
+
+```cpp
+static void deallocate(void *p, size_t n){
+	obj *q = (obj *) p;
+	obj * volatile * my_free_list;
+	if(n > (size_t) __MAX_BYTES){
+		malloc_alloc::deallocate(p, n);
+		return;
+	}
+	my_free_list = free_list + FREELIST_INDEX(n);
+	q->free_list_link = *my_free_list;
+	*my_free_list = q;	//这下真的是头插法了。
+}
+```
+
+#### 2.2.9 重新填充free lists
+
+在我们上面所提到的`allocate()`函数中，当自由链表中已经没有可用的节点时，我们会尝试重新填充该自由链表并分配内存给用户，这部分依靠我们的`refill(size_t n)`实现。
+
+`refill`函数将从内存池中，经由`chunk_alloc`函数来取得20个新节点。如果内存池中没有 20 * 每个节点大小 的内存，则获得的节点数可能小于20：
+
+```cpp
+//注意，上述allocate中调用该函数时嵌套调用了ROUND_UP函数，因此n是一个8字节对齐的数字。
+void * __default_alloc_template<threads, inst>::refill(size_t n){
+	int nobjs = 20;		// 默认取得20个节点
+	//尝试取得nobjs个大小为n的节点
+	char * chunk = chunk_alloc(n, nobjs);	// 这里的第二个参数传递的是引用，由它返回实际取得的节点数量。
+	obj * volatile * my_free_list;
+	obj * result;
+	obj * current_obj, *next_obj;
+	int i;
+	
+	//如果chunk_alloc只得到了一个内存块，那么该内存块交给用户使用，free_list不会得到新的节点。
+	if(nobjs == 1){
+		return chunk;
+	}
+	//否则调整free_list来容纳新的节点
+	my_free_list = free_list + FREELIST_INDEX(n);
+	
+	result = (obj *)chunk;	// 得到了nobjs(nobjs > 1)个节点，将第1个节点返回给用户。
+	*my_free_list = next_obj = (obj *)(chunk + n);	//	注意chunk在声明时声明为char *类型，因此偏移n实际上就是偏移n个字节，即正好一个节点的大小。偏移后的地址就是free_list新得到的第一个节点的起始地址。
+	for(i = 1;; i++){	// 循环将新的节点们链接起来，因为第一个节点要返回给用户，因此i从1开始。
+		current_obj = next_obj;
+		next_obj = (obj *)((char *)next_obj + n);	// 与上面的chunk同理
+		if(nobjs - 1 == i){
+			current_obj->free_list_link = nullptr;
+			break;
+		}else{
+			current_obj->free_list_link = next_obj;
+		}
+	}
+	return result;
+}
+```
+
+#### 2.2.10 内存池
+
+内存池的主要功能是经由`chunk_alloc`分配内存给`free_list`使用。这部分代码较长，在书上P66~P68。
+
+下面简单叙述`chunk_alloc`的功能：
+
+首先，我们检查内存池的剩余空间，如果完全满足需要（n * nobjs个字节），那么直接分配。
+
+如果不能满足(n * nobjs)，但是可以分配至少1个n字节大小的内存，那么就分配尽可能多（1或1以上）个n字节大小的内存。
+
+如果连一个n字节大小的内存都不够，则将内存池中剩下的内存尽可能分配给自由链表（比如还剩31字节，则分配给24字节的自由链表，剩下7字节则浪费了）。然后向系统堆申请新的内存空间用于内存池。
+
+如果堆中不够内存，`malloc`失败，
