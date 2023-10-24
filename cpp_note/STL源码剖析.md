@@ -755,3 +755,73 @@ template<class T>
 typename iterator_traits<T>::value_type func(I ite){...}
 ```
 
+这相当于我们给`T`加上了一层封装，这样做有什么意义呢？
+
+意义就在于我们可以针对`iterator_traits`这个类模板进行特化，使其对"任意`T`类型的指针"包含不同的`value_type`类型名:
+
+```cpp
+template<class T>
+class iterator_traits<T *>{
+	typedef T value_type;
+};
+```
+
+这将使得`value_type`成为"指针所指向的对象"的类型名。
+
+最后还有一个小小的问题是，如若指针类型是"指向常量对象的"指针呢？也就是说，假如`T`的实际类型是`const int *`，上述偏特化的`value_type`将成为一个`const int`，而我们可能不希望去声明一个无法修改的对象。
+
+解决方法也很简单，那就是针对常量指针同样声明一个特化版本:
+
+```cpp
+template<class T>
+class iterator_traits<const T*>{
+	typedef T value_type;
+};
+```
+
+如此就可以解决几乎所有有关于类型识别的问题了。当然，如果想要使得`traits`萃取能够有效运作，每一个迭代器都需要遵循约定，自行以内嵌类型定义的方式定义出相应类型。
+
+最常用到的迭代器类型有五种：`value_type`、`difference type`、`pointer`、`reference`、`iterator category`。如果希望自定义的容器能够兼容STL，则应该：
+
+```cpp
+template<class T>
+class iterator_traits{
+	typedef typename T::iterator_category iterator_category;
+	typedef typename T::value_type value_type;
+	typedef typename T::difference_type difference_type;
+	typedef typename T::pointer pointer;
+	typedef typename T::reference reference;
+};
+```
+
+注意，<font color="red">`iterator_traits`必须针对传入类型为指针和常量指针的版本进行特化。</font>
+
+#### 3.4.1 迭代器类型: value_type
+
+具体内容已在上一节介绍过。
+
+#### 3.4.2 迭代器类型： difference_type
+
+`difference_type`用来表示两个迭代器之间的距离，因此它可以用来表示一个容器的最大容量。
+
+从我个人理解来说，`difference_type`像是"一单位"的距离，比如对于数组`int sz[]`而言。从空间概念上来看，`sz[2]`和`sz[3]`相差"一`int`"的距离。从字节表示上来看，它们的起始地址一般情况下相差`4`个字节。这里的"一`int`"就是`difference_type`的单位。
+
+也就是说，针对一个连续容器而言，`difference_type`表示了两个迭代器之间的距离，这个距离指的是"单位距离"而不是"字节距离"。
+
+```cpp
+template<calss I, class T>
+typename iterator_traits<I>::difference_type
+count(I first, I last, const T& value){
+	typename iterator_traits<T>::difference_type n = 0;
+	for(; first != last; first++){
+		if(*first == value){
+			n++;
+		}
+	}
+	return n;
+}
+```
+
+假如`I frist`和`I last`表示了某个容器的起始位置和结束位置，那么"一单位"就是`*first`的类型的大小。`difference_type`则是一个有符号的整数，表示该范围内包含了多少个这样的类型的元素。
+
+和`value_type`几乎一样，<font color="red">`difference_type`也需要对指针和常量指针进行特化，方法一样。</font>
