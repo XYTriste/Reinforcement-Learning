@@ -985,3 +985,161 @@ inline typename iterator_traits<InputIterator>::iterator_category iterator_categ
 ```
 
 其实功能是完全一样的，都是传递一个临时对象来调用不同重载版本，只不过单独定义一个函数的方式可能有助于减少函数参数中写的太长太复杂，这样的写法也便于后面修改。
+
+<font color="red">任何一个迭代器，它的真实类型永远它所能具有的功能中最强的那个。</font>这句话其实很好理解，一个`Random access iterator`一定是一个`Forwarditerator`，反之则不然。
+
+<font color="green">还有一个小技巧：在上述代码中模板名命名为`Inputiterator`，这是一个STL的命名规则："以算法可以接受的最低阶的迭代器类型为其模板类型参数命名。"</font>
+
+还有一个值得一提的一点就是，在刚才的"五种迭代器类型"的部分，我们描述了一些继承关系。
+
+为什么要这么做？书中P97给了比较详细的解释，这里简要说明。
+
+还是假设我们要实现`advance`函数，对于`InputIterator`和`ForwardIterator`，它们在该函数下的实现并不任何不同（因为它们都是顺序前向迭代）。因此按理来说，我们只需要编写`InputIterator`的`advance`函数实现即可，在`ForwardIterator`的`advance`函数实现中只需要对`InputIterator`的`advance`函数进行转调用即可。
+
+但是，我们可以消除这样的转调用，从而减少代码的冗余。方法就是实现刚才所提到的继承关系。
+
+这也和重载函数的机制有关，当我们编写了一个重载函数调用的时候，编译器会为其找到"最匹配的版本"。如果没有类型完全一致的版本，则会找到"差不多的版本"。
+
+也就是说，如果我们使用`InputIterator i`调用`advance`函数，类似这样:
+
+```cpp
+advance(i, n, input_iterator_tag);
+```
+
+如果使用的是`ForwardIterator i`，调用只有标记类型的参数不同:
+
+```cpp
+advance(i, n, forward_iterator_tag);
+```
+
+但是我们说过了，二者的`advance`操作完全一样，因此通常情况下在`ForwardIterator`特化版本的`advance`版本内部会这样调用:
+
+```cpp
+advance(i, n, input_iterator_tag);
+```
+
+这将导致转调用，但是有了继承关系，即使我们调用`advance(i, n, forward_iterator_tag);`，即便我们没有设计`ForwardIterator`的`advance`版本，也会转调用`InputIterator`的`advance`版本。
+
+### 3.5 std::iterator的保证
+
+为了符合规范，任何迭代器都应该提供相应的五个迭代器的类型，以利于`traits`的萃取。STL中提供了一个标准`std::iterator`（书上P100），用户自定义的迭代器只要继承自它，就可以保证符合STL的规范。
+
+### 3.6 iterator完整代码
+
+书中P101，这部分代码可以好好看看。
+
+### 3.7 __type_traits
+
+望文生义，`iterator_traits`用来萃取`iterator`(迭代器)的`traits`(特征)。那么`__type_traits`自然而然就是萃取`type`(类型)的`traits`(特征)。
+
+这里指导的类型特征是指：该类型的对象是否具有平凡的默认构造函数、拷贝构造函数、拷贝赋值运算符、析构函数等。如果一个类型具备这些特征，我们对这个类型进行这些操作的时候就可以采取较为有效的方式（例如，不去调用它的默认构造函数）。
+
+根据规范，在程序中我们通常用这样的方式来运用`__type_traits<T>`:
+
+```cpp
+__type_traits<T>::has_trivial_default_constructor
+__type_traits<T>::has_trivial_copy_constructor
+__type_traits<T>::has_trivial_assignment_operator
+__type_traits<T>::has_trivial_default_destructor
+__type_traits<T>::is_POD_type	//POD: plain old data
+```
+
+我们希望萃取出来的结果仍然是一个类型，而不是一个布尔值。这与上面函数重载减少转调用的原理相同，我们可以通过结果的类型进行参数推导进而实现函数重载调用。具体来说，结果将会是:
+
+```cpp
+class __true_type{};
+class __false_type{};
+```
+
+这样的空类不会带来额外负担，但是又能够标识它是否具有相应的属性，满足我们的要求。
+
+默认情况下，`__type_traits`的模板类中会将这五个属性都别名为`__false_type`，因为这是更保守的做法。
+
+究竟什么时候一个类才应该有自己的非平凡构造函数等函数呢？一个准则是:
+
+<font color="red">如果一个类含有指针成员，并对它进行内存配置，那么这个类就需要实现出自己的非平凡函数。</font>
+
+## 4. 序列式容器
+
+### 4.1 容器的概念和分类
+
+#### 4.1.1序列式容器
+
+所谓的序列式容器，指的是元素从内存分布上来说有序，但元素值本身未必有顺序。C++本身提供一个序列式容器`array`，STL另外提供了`vector`、`list`、`deque`、`stack`、`queue`、`priority-queue`等序列式容器。
+
+### 4.2 vector
+
+#### 4.2.1 vector概述
+
+相较于C++本身提供的`array`，`vector`在功能上与其非常相似。它们唯一区别在于空间运用的灵活性。`array`是静态空间，分配后只能保存固定数量的元素，如果想要插入更多的元素，只能通过新分配更大的空间，再将旧空间中的数据拷贝到新空间中去。
+
+`vector`则是动态空间，随着元素加入自行扩充空间来容纳新的元素。
+
+#### 4.2.2 vector定义摘要
+
+这部分给出了vector的部分源代码，没有太多值得商榷的内容。
+
+大致分为嵌套类型定义（用于`iterator traits `）以及实现内存管理的`allocator`，再加上3个指针（或者说迭代器，分别表示`vector`的起点，当前终点，以及可用内存的终点）。
+
+其他函数都依靠这几个指针进行具体实现。
+
+具体代码在书上P116。
+
+#### 4.2.3 vector的迭代器
+
+`vector`维护的是一个连续线性空间，所以不论其元素类型是什么，普通指针都可以作为vector的迭代器，并满足所有迭代器的操作。(从书中P116的代码也可以看出vector的迭代器实际上就是普通指针)。
+
+因此，<font color="red">vector提供的是`Random access iterator`。</font>
+
+#### 4.2.4 vector的数据结构
+
+vector简单的采用线性连续空间，`iterator start`、`iterator end_of_storage`、`iterator finish`分别表示目前使用空间的起点，目前可用空间的结尾以及目前使用空间的终点。
+
+为了降低空间配置的成本，vector的实际容量会比客户端需求量大一些。换句话说，一个vector的容量永远大于等于其存储的元素数量大小。
+
+<font color="red">如果在满载时继续向vector插入元素，则容量会扩充到原来的两倍。如果两倍容量仍然不足，就继续扩充至足够大的容量。</font>
+
+另外记住的一点是，当满载并继续插入时，`vector`不得不向内存分配器请求一块更大的内存并将元素复制过去。因此实际上经历了"重新分配、元素移动、释放原空间"的过程。
+
+#### 4.2.5 vector的构造与内存管理:constructor, push_back
+
+这部分给出了具体实现，代码在P120。
+
+没有太多值得额外提的内容，不同的`constructor`会根据参数的不同选用不同的配置方式。`push_back`则会检查是否还有可用空间，如果有可用空间则在可用空间上构造，否则申请空间并重新配置、移动数据、释放原空间。
+
+#### 4.2.6 vector的元素操作: pop_back，erase，clear，insert
+
+`pop_back`没有什么特色，无非是将`finish`迭代器回退一个元素，并通过`destroy`函数销毁该元素。
+
+`erase`提供了两个重载版本。第一个版本将迭代器范围`[first,last)`范围内的元素擦除。具体来说：
+
+首先调用`copy`函数将`[last, finish)`范围内的元素复制到以`first`为起点的地址上，copy函数会返回一个指向复制完成后最后一个元素所在位置之后的迭代器`target`。即:`target = first + (last - first)`。
+
+随后，销毁`[target, finish]`范围内的元素，`erase`需要擦除的元素已经被覆盖。
+
+最后，调整`finish`迭代器指向的位置。
+
+
+
+第二个版本指定擦除某个位置的元素，同样是通过覆盖擦除对应位置元素。只不过只需要销毁最后一个元素并调整`finish`即可。
+
+
+
+P125页给出了insert函数的实现。
+
+首先，判断备用空间的大小是否足够容纳新增的元素。
+
+如果足够，计算从插入点到结尾包含多少个元素，这些元素需要进行后移。如果插入点到结尾的元素数量大于新增的元素数量，那么首先计算出有多少个元素要被挤到原来的`finish`后面去(其实就是`[finish - n, finish)`)。然后，将这部分的元素拷贝到以`finish`为起点的备用空间中去。然后，将插入点`position`到`finish-n`（也就是那些会被往后挤，但不会超出原来的`finish`）的元素使用逆向复制`copy_backward`的方式复制到以原来的`finish`为结尾的空间中去。最后，调用`fill`填充`[position, position + n)`即可。（不要忘了更新`finish`）。
+
+```cpp
+//假设vector此时包含元素: 1 2 3 4 5
+//现在要插入2个元素0，插入点在元素2之后
+unitialized_copy(finish - n, finish, finish);
+//这行代码将元素4 5复制到finish为起点的空间中，此时vector元素为1 2 3 4 5 4 5
+copy_backward(position, old_finish - n, old_finish);
+//这行代码将元素3复制到以5(第一个5)为终点的空间中，此时vector元素为1 2 3 4 3 4 5
+fill(position, position + n, 0);
+//这行代码将元素0填充到以3为起点的空间中，此时vector元素为1 2 0 0 3 4 5
+finish += 2		// 不要忘了更新finish
+```
+
