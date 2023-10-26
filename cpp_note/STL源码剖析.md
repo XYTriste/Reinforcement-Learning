@@ -825,3 +825,163 @@ count(I first, I last, const T& value){
 假如`I frist`和`I last`表示了某个容器的起始位置和结束位置，那么"一单位"就是`*first`的类型的大小。`difference_type`则是一个有符号的整数，表示该范围内包含了多少个这样的类型的元素。
 
 和`value_type`几乎一样，<font color="red">`difference_type`也需要对指针和常量指针进行特化，方法一样。</font>
+
+#### 3.4.3 迭代器类型: reference_type
+
+C++中，函数如果要返回一个左值，都是以引用方式返回（右值不允许赋值操作，所以不会有`func() = 1`这样的写法）。如果`p`是一个迭代器类型，它指向的对象(`value_type`)为`T`，那么`*p`不应该是`T`类型，而是对`T`类型的引用。同理，如果`p`是一个`const iterator`，那么`*p`不应该是`const T`，而是对`const T`的引用。
+
+#### 3.4.4 迭代器类型: pointer type
+
+如果"传回一个左值，它代表着迭代器`p`指向的对象"(引用)是可以的，那么"传回一个左值，它代表着迭代器`p`所指向的对象的地址"（指针）也一定可以。
+
+因此，对原生指针以及const指针进行特化时，不止需要对指针的特殊情况进行`typedef`，同时也要对引用进行`typedef`。
+
+#### 3.4.5 迭代器类型: iterator_category
+
+首先，我们讨论迭代器的分类。
+
+<font color="red">根据移动特性与实现操作，迭代器被分为五类:</font>
+
+- input iterator: 这种迭代器指向的对象，表示一个"来自其他地方的输入"，因此不可改变，只读。
+- output iterator: 只写。
+- Forward iterator: 允许"写入型"算法在这种迭代器形成的区间上进行读写操作，从名字也可以看出来它是一个前向迭代器，单向的。
+- Bidirectional iterator: 可以双向移动的迭代器，可读写对象。
+
+- Random Access iterator: 功能最强大的迭代器，支持随机读写访问。
+
+从描述的顺序就可以看出，最上方的迭代器受到的限制越多，越到后面实现的迭代器的功能就越强。
+
+上述描述内容涉及到的一个问题是，如果我们要针对不同类型的迭代器设计算法，如何尽可能的提高效率？
+
+例如，一个`input iterator`和一个`Random Access iterator`都支持前向迭代的功能，但是`input iterator`只能进行顺序读，`RAI`则可以进行随机读。如果我们有这样的函数:
+
+```cpp
+void advance(Iterator& it, int n){
+	while(n--)
+		it++;
+}
+```
+
+这当然对`input iterator`和`Random Access iterator`都有效，但是因为`RAI`是支持随机写的，因此显然对于它而言，这样的代码更有效率:
+
+```cpp
+it += n;
+```
+
+那么，如何针对不同的迭代器实现不同的前向迭代方式呢？一种方法是进行判断并声明不同的函数：
+
+```cpp
+template<class InputIterator, class Distance>
+void advance(InputIterator& i, Distance n){
+	if(is_random_access_iterator(i)){
+		advance_RAI(i, n);
+	}else if(...){
+		...
+	}
+	...
+}
+```
+
+<font color="red">这样做的不好之处在于将负担交给了运行期，因为直到运行时程序才知道`i`的具体类型，才知道具体调用哪个函数。这降低了程序执行的效率。</font>
+
+另一种方式则是使用函数重载，这样在编译器就能够确定具体调用哪个函数。
+
+但是我们也可以看到，上面这个`advance`的两个参数都是模板类型，没有具体的类型。在不提供其他参数的情况下无法重载。因此为了让它成为重载函数，它必须包含一个确定类型的参数。
+
+这就用到了我们的`traits`萃取技术。首先，我们使用五个`class`来代表五种迭代器类型:
+
+```cpp
+class input_iterator_tag{ };
+class output_iterator_tag{ };
+class forward_iterator_tag: public input_iterator_tag{ };
+class bidirectional_iterator_tag: public forward_iterator_tag{ };
+class random_access_iterator_tag: public bidirectional_iterator_tag{ };
+```
+
+现在我们可以进行函数重载了，只要在`advance`函数的重载版本中指定不同的迭代器类型参数并提供不同的实现即可，函数内部并不需要用到这个迭代器类型，该类型只是用来激活不同的重载版本。
+
+现在我们整理一下内容，假设我们需要自定义一个迭代器，并希望它实现`advance`函数的功能，我们应该为其指定一个`iterator_category`:
+
+```cpp
+template<class T>
+class MyIterator{
+	...
+	using iterator_category = std::random_access_iterator_tag;
+}
+```
+
+当我们将自定义的迭代器传递给STL容器（例如vector）时，萃取技术会得到其类型:
+
+```cpp
+template<class T>
+class iterator_traits{
+	...
+	typedef typename T::iterator_category iterator_category;
+};
+// MyIterator::iterator_category 经过萃取后， iterator_category成为了std::random_access_tag的别名。
+```
+
+据此，我们假设通过`__advance`函数来调用STL标准库中的对应函数:
+
+```cpp
+template<class InputIterator, class Distance>
+void advance(InputIterator& i, Distance n){
+	__advance(i, n, iterator_traits<InputIterator>:: iterator_category());	
+}
+```
+
+这样就会根据其实际类型`std::random_access_tag`来调用不同的重载版本了。
+
+> 这段代码更准确地描述了C++中的迭代器萃取技术和如何根据迭代器的类型调用不同的`advance`函数版本。但是，仍有一些需要纠正和澄清的地方：
+>
+> 1. **自定义迭代器的类别**：在`MyIterator`类中，你已经正确使用了`using`来定义`iterator_category`。这是一个好的实践，因为它清楚地表明了迭代器的类别。
+>
+> 2. **迭代器特性的萃取**：虽然你展示了如何为一个迭代器定义一个`iterator_traits`类，但实际上，标准库中已经有了`std::iterator_traits`。你不需要重新实现它，除非你正在创建一个与标准库不兼容的自定义迭代器。
+>
+> 3. **advance函数的实现**：在`advance`函数的实现中，你提到了一个名为`__advance`的函数，这个函数似乎是根据迭代器的类别来调用不同的函数重载。然而，你没有提供`__advance`函数的实现或其重载版本。在实际的STL实现中，`std::advance`是已经根据不同的迭代器类别进行了优化的。
+>
+> 4. **代码的准确性**：在调用`__advance`函数时，你应该传递一个实际的类别对象而不是一个类型。代码应更正为：
+>    ```cpp
+>    typename iterator_traits<InputIterator>::iterator_category category;
+>    __advance(i, n, category);
+>    ```
+>    这里，`category`是从迭代器特性中萃取出的迭代器类别的一个实例。
+>
+> **知识点总结**：
+> - **迭代器类别**：迭代器被分为不同的类别，如输入迭代器、前向迭代器、双向迭代器、随机访问迭代器等，每种都有其特定的功能和限制。
+> - **萃取技术**：通过使用`iterator_traits`，可以获取关于迭代器的信息，如其类别、值类型、差异类型等。这对于编写可与多种类型的迭代器一起工作的泛型代码非常有用。
+> - **函数分派**：根据迭代器的类别，可以调用最适合该迭代器性能特性的函数版本。例如，对于随机访问迭代器，有可能直接跳转到序列中的特定位置，而对于前向迭代器，则可能需要逐个元素地前进。
+>
+> 这些概念对于理解C++中的迭代器和泛型编程至关重要，它们帮助开发者编写高效、可重用的代码。
+
+注意上面的这行代码:
+
+```cpp
+__advance(i, n, iterator_traits<InputIterator>:: iterator_category());	
+```
+
+关键在于:
+
+```cpp
+iterator_traits<InputIterator>:: iterator_category()
+```
+
+这实际上调用的是:
+
+```cpp
+std::random_access_iterator_tag()
+```
+
+这创建了一个临时对象作为参数传递给函数，函数据此判断调用哪个重载版本。
+
+书中P96给出了`SGI STL`中的真正实现，区别仅在于定义了一个内联函数:
+
+```cpp
+template<class InputIterator>
+inline typename iterator_traits<InputIterator>::iterator_category iterator_category(InputIterator& i){
+	typedef typename iterator_traits<InputIterator>::iterator_category category;
+	return category();
+}
+```
+
+其实功能是完全一样的，都是传递一个临时对象来调用不同重载版本，只不过单独定义一个函数的方式可能有助于减少函数参数中写的太长太复杂，这样的写法也便于后面修改。
