@@ -104,7 +104,7 @@ $$
 M_{i,*}=c \\
 \forall i \in \{a*\left\lfloor\dfrac{m}{k}\right\rfloor,a*\left\lfloor\dfrac{m}{k}\right\rfloor + 1,...,(a+1)*\left\lfloor\dfrac{m}{k}\right\rfloor - 1\}
 $$
-其中，$a$表示动作的下表，$k$是动作空间的维度，$c$表示嵌入值。矩阵$M$的行分为$\left\lfloor\dfrac{m}{k}\right\rfloor$份，并根据动作索引$a$在特定部分填充$c$。由于这个二维数组可以看作是卷积神经网络的另一个输入通道，我们称之为动作通道。
+其中，$a$表示动作的下标，$k$是动作空间的维度，$c$表示嵌入值。矩阵$M$的行分为$\left\lfloor\dfrac{m}{k}\right\rfloor$份，并根据动作索引$a$在特定部分填充$c$。由于这个二维数组可以看作是卷积神经网络的另一个输入通道，我们称之为动作通道。
 
 ### 在探索中应用行动奖励
 
