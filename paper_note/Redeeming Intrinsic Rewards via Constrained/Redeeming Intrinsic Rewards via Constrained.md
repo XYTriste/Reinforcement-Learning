@@ -215,7 +215,7 @@ $$
 
 #### performance difference lemma
 
-当然，性能差异引理（Performance Difference Lemma）在强化学习中是用来量化两个策略之间性能差异的工具。它的表达式如下：
+性能差异引理（Performance Difference Lemma）在强化学习中是用来量化两个策略之间性能差异的工具。它的表达式如下：
 
 $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \sum_{a} (\pi'(a|s) - \pi(a|s)) Q^{\pi}(s,a) $$
 
@@ -261,3 +261,76 @@ $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \sum_{a} (\pi'(a|s) - \pi(a|s)) A^{\p
 $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \sum_{a} (\pi'(a|s) - \pi(a|s)) Q^{\pi}(s,a) $$
 
 这个引理提供了一个量化策略改进的强大工具，它说明了通过增加在某状态下选择更好动作的概率，可以提高策略的整体性能。
+
+> 上述过程基本上是正确的，但在第5步和第7步之间，需要一个更明确的过渡来说明如何从 $Q^{\pi'}(s,a)$ 到 $Q^{\pi}(s,a)$。这个过渡涉及到将 $Q^{\pi'}(s,a)$ 替换为 $Q^{\pi}(s,a)$ 加上策略 $\pi'$ 和 $\pi$ 之间的优势函数差异。这里是详细的解释：
+>
+> 在第5步中，我们有：
+>
+> $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \left( \sum_{a} \pi'(a|s) Q^{\pi'}(s,a) - \sum_{a} \pi(a|s) Q^{\pi}(s,a) \right) $$
+>
+> 为了将 $Q^{\pi'}(s,a)$ 替换为 $Q^{\pi}(s,a)$，我们需要考虑两个策略之间的优势函数 $A^{\pi}(s,a)$。我们知道：
+>
+> $$ A^{\pi}(s,a) = Q^{\pi}(s,a) - V^{\pi}(s) $$
+>
+> 因此，我们可以将 $Q^{\pi'}(s,a)$ 表达为：
+>
+> $$ Q^{\pi'}(s,a) = A^{\pi}(s,a) + V^{\pi}(s) $$
+>
+> 但是，我们需要注意的是，这里的 $V^{\pi}(s)$ 是在策略 $\pi$ 下的状态价值函数，而我们需要的是在策略 $\pi'$ 下的状态价值函数 $V^{\pi'}(s)$。为了解决这个问题，我们可以使用策略改进定理，它指出如果策略 $\pi'$ 在所有状态 $s$ 下都至少和策略 $\pi$ 一样好，那么：
+>
+> $$ Q^{\pi'}(s,a) \geq V^{\pi}(s) $$
+>
+> 对于所有的 $s$ 和 $a$。这意味着 $A^{\pi}(s,a)$ 是非负的，当我们从 $\pi$ 转换到 $\pi'$ 时。
+>
+> 现在，我们可以将 $Q^{\pi'}(s,a)$ 替换为 $Q^{\pi}(s,a)$ 和 $A^{\pi}(s,a)$ 的关系，并将其代入 $J(\pi')$ 的表达式中：
+>
+> $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \left( \sum_{a} \pi'(a|s) (A^{\pi}(s,a) + V^{\pi}(s)) - \sum_{a} \pi(a|s) Q^{\pi}(s,a) \right) $$
+>
+> 由于 $V^{\pi}(s)$ 是 $Q^{\pi}(s,a)$ 在策略 $\pi$ 下的期望值，我们可以将其从第一项中提取出来，并且由于 $\sum_{a} \pi'(a|s) = 1$，我们可以得到：
+>
+> $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \left( V^{\pi}(s) + \sum_{a} \pi'(a|s) A^{\pi}(s,a) - V^{\pi}(s) \right) $$
+>
+> 这简化为：
+>
+> $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \sum_{a} \pi'(a|s) A^{\pi}(s,a) $$
+>
+> 但是，为了得到性能差异引理的最终形式，我们需要考虑 $\pi'(a|s) - \pi(a|s)$ 而不仅仅是 $\pi'(a|s)$。这是因为我们对比的是两个策略之间的差异，而不仅仅是新策略 $\pi'$。因此，我们得到：
+>
+> $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \sum_{a} (\pi'(a|s) - \pi(a|s)) A^{\pi}(s,a) $$
+>
+> 最后，由于 $A^{\pi}(s,a) = Q^{\pi}(s,a) - V^{\pi}(s)$，并且 $V^{\pi}(s)$ 是 $Q^{\pi}(s,a)$ 在策略 $\pi$ 下的期望值，我们可以将 $A^{\pi}(s,a)$ 替换为 $Q^{\pi}(s,a)$，得到性能差异引理的最终形式：
+>
+> $$ J(\pi') - J(\pi) = \sum_{s} d^{\pi'}(s) \sum_{a} (\pi'(a|s) - \pi(a|s)) Q^{\pi}(s,a) $$
+>
+> 这样，我们就完成了从 $Q^{\pi'}(s,a)$ 到 $Q^{\pi}(s,a)$ 的转换，并且得到了性能差异引理的正确表达式。
+
+那么，根据性能差异引理，目标函数$\lambda J_E(\pi_E)-J_{E+I}^{\lambda}(\pi_{E+I})$可以重写为:
+$$
+\begin{align}
+\lambda J_E(\pi_E)-J_{E+I}^{\lambda}(\pi_{E+I})&=\Bbb{E}_{\pi_E}[\sum_{t=0}^{\infty}{\gamma^tU_{\min}^{\pi_{E+I}}(s_t,a_t)}] \\
+where\ U_{\min}^{\pi_{E+I}}(s_t,a_t) &:= \lambda r_t^E + \gamma V_{E+I}^{\pi_{E+I}}(s_{t+1})-V_{E+I}^{\pi_{E+I}}(s_t) \\
+V_{E+I}^{\pi_{E+I}}(s_t) &:=\Bbb{E}_{\pi_{E+I}}[\sum_{t=0}^{\infty}{\gamma^t(r_t^E+r_t^I)|s_0=s_t}]
+\tag{7}
+\end{align}
+$$
+接着，在相似性假设的前提下，可以得到上式中的下界：
+$$
+\begin{align}
+\Bbb{E}_{\pi_E}[\sum_{t=0}^{\infty}{\gamma^tU_{\min}^{\pi_{E+I}}(s_t,a_t)}] \geq \Bbb{E}_{\pi_{E+I}}[\sum_{t=0}^{\infty}{\gamma^t \min{\{\frac{\pi_{E}(a_t,s_t)}{\pi_{E+I}(a_t,s_t)}U_{\min}^{\pi_{E+I}}(s_t,a_t), clip(\frac{\pi_{E}(a_t,s_t)}{\pi_{E+I}(a_t,s_t)},1-\epsilon,1+\epsilon)U_{\min}^{\pi_{E+I}}(s_t,a_t)\}}}]
+\tag{8}
+\end{align}
+$$
+其中，$\epsilon \in [0,1]$是一个阈值。直观的说，这个截断的目标惩罚了与策略$\pi_{E+I}$不同的策略$\pi_E$，因为过大或者过小的$\frac{\pi_{E}(a_t,s_t)}{\pi_{E+I}(a_t,s_t)}$会被截断。
+
+根据上述内容，我们就可以计算出式$(5)$中的最小化部分了，现在我们需要考虑这个子问题：
+$$
+{\max_{\pi_{E+I}\in \Pi}{{J_{E+I}^{\lambda}(\pi_{E+I})-\lambda J_E(\pi_E)}}}
+\tag{9}
+$$
+我们同样依赖近似来推导出智能体目标的下界：
+$$
+\begin{align}
+{{J_{E+I}^{\lambda}(\pi_{E+I})-\lambda J_E(\pi_E)}} \geq \Bbb{E}_{\pi_{E}}[\sum_{t=0}^{\infty}{\gamma^t \min{\{\frac{\pi_{E+I}(a_t,s_t)}{\pi_{E}(a_t,s_t)}U_{\max}^{\pi_{E}}(s_t,a_t), clip(\frac{\pi_{E+I}(a_t,s_t)}{\pi_{E}(a_t,s_t)},1-\epsilon,1+\epsilon)U_{\max}^{\pi_{E}}(s_t,a_t)\}}}]
+\tag{10}
+\end{align}
+$$
