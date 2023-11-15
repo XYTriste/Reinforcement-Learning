@@ -2216,3 +2216,323 @@ hashtable<int, int, hash<int>, identity<int>, equal_to<int>, alloc> iht(50, hash
 
 与`hash_map`几乎完全一致，唯一不同是允许键重复。因此插入操作使用的是`insert_equal`而不是`insert_unique`。除此之外别无二致。
 
+## 6. 算法
+
+### 6.1算法概观
+
+概念介绍，不做笔记。
+
+#### 6.1.1 算法分析与复杂度表示
+
+概念介绍，不做笔记。
+
+#### 6.1.2 STL算法总览
+
+以表格形式列出了许多STL库提供的算法，书中P288，不做笔记。
+
+#### 6.1.3 质变算法--改变操作对象的值
+
+简而言之，如果我们将某个对象或者某个区间上的值传递给某个算法，该算法会改变该对象或者该区间上的内容。则称之为质变算法，最常见的就是`sort`，将某个区间上的元素进行排序。
+
+#### 6.1.4 非质变算法--不改变操作对象的值
+
+与质变算法相反，不改变操作对象的值。例如`find`、`count`等。
+
+#### 6.1.5 STL算法的一般形式
+
+<font color="red">所有泛型算法的前两个参数都是一对迭代器，表示一个前闭后开的区间。</font>
+
+该区间必须具有可加性，也就是说能够通过`++`的方式向前递增。
+
+STL算法在定义的过程中，会在模板参数中给出它能够接受的最低限度的迭代器类型。例如`InputIterator`就表示它最低能接受该迭代器类型。
+
+如果我们传递了错误类型的迭代器给算法，这样的错误在编译期间不会被捕获。因为"迭代器类型"实际上并不是一个真实类型，而是一个"表示了类型的参数"。
+
+许多STL算法不仅包含了默认行为的版本，也包含了一个重载版本。该重载版本不仅接收某个区间作为参数，也接收一个仿函数来覆盖算法默认的策略（比如比较的方式等）。
+
+质变算法通常提供两个版本，一个是`in-place`版，在传递的区间上就地修改元素。另一个则是`copy`版，将操作对象复制一份副本，在副本上修改然后返回该副本。
+
+### 6.2 算法的泛化过程
+
+一个值得思考的问题是，如何设计一个通用的算法，使其不受到数据结构的限制呢？
+
+换而言之，假如我们包含一个`find`算法。对于`deque`或者`vector`而言，我们只需要线性扫描该容器即可。而对于一个二叉搜索树而言，我们需要根据当前节点的大小来前往不同的子树。
+
+关键就在于迭代器，只要我们提供了一个迭代器，将具体的迭代操作封装起来，那么就可以直接调用迭代器来搜索容器了，具体如何搜索由迭代器内部实现决定。
+
+### 6.3 数值算法
+
+#### 6.3.1 运用实例
+
+代码在书中P298，示范了多个算法的实例。
+
+#### 6.3.2 accumulate
+
+该算法接收一个区间作为参数，并接收一个参数`init`作为初始值。在初始值的基础上对区间内的元素进行求和。
+
+也就是说，它返回**初始值 + 区间元素和**。如果只是想得到区间元素和，只要将初始值设为0即可。
+
+它也可以用来求差：
+
+> `minus<int>()` 在C++中是一个函数对象（也称为函数适配器），它是`std::minus`模板类的一个特化。`std::minus`是定义在`<functional>`头文件中的一个预定义的函数对象，用于执行两个参数的减法操作。
+>
+> 当你使用`minus<int>()`时，你创建了一个可以接受两个`int`类型参数的对象，并返回它们的差。例如：
+>
+> ```cpp
+> #include <functional>
+> #include <iostream>
+> 
+> int main() {
+>     std::minus<int> subtract;
+>     int result = subtract(10, 5); // 使用minus对象进行减法操作
+>     std::cout << result; // 输出：5
+>     return 0;
+> }
+> ```
+>
+> 在这个例子中，`subtract`是一个`std::minus<int>`类型的对象，它重载了`()`运算符，使得它可以像函数一样被调用，并执行减法操作。
+>
+> `std::minus`通常与标准库算法一起使用，例如`std::transform`，在这种情况下，它可以用来对容器中的元素进行逐对减法操作。
+
+#### 6.3.3 adjacent_difference
+
+`adjacent_difference` 是 C++ 标准库中定义在 `<numeric>` 头文件中的一个函数模板，它用于计算相邻元素之间的差异，并将结果保存到另一个范围中。这个函数通常用于计算一系列数值的一阶差分，也就是每对相邻元素之间的差值。
+
+函数的原型如下：
+
+```cpp
+template <class InputIterator, class OutputIterator>
+OutputIterator adjacent_difference(InputIterator first, InputIterator last, OutputIterator result);
+
+template <class InputIterator, class OutputIterator, class BinaryOperation>
+OutputIterator adjacent_difference(InputIterator first, InputIterator last, OutputIterator result, BinaryOperation binary_op);
+```
+
+第一个版本的 `adjacent_difference` 默认使用减法操作来计算差值。第一个元素被复制到结果序列中，然后每个后续元素都减去它前面的元素。
+
+第二个版本允许用户指定一个二元操作`binary_op`，而不是使用默认的减法操作。这个操作用于计算结果序列中的每个元素。
+
+下面是一个使用 `adjacent_difference` 的例子：
+
+```cpp
+#include <iostream>
+#include <vector>
+#include <numeric> // for adjacent_difference
+
+int main() {
+    std::vector<int> v{1, 3, 5, 7, 9};
+    std::vector<int> differences(v.size());
+
+    // 计算相邻元素之间的差异
+    std::adjacent_difference(v.begin(), v.end(), differences.begin());
+
+    // 输出结果
+    for (int diff : differences) {
+        std::cout << diff << ' ';
+    }
+    // 输出将会是：1 2 2 2 2
+    return 0;
+}
+```
+
+在这个例子中，`differences` 中的第一个元素是 `v` 中的第一个元素，然后每个后续元素是 `v` 中相邻元素的差值。所以，对于输入序列 `{1, 3, 5, 7, 9}`，输出将会是 `{1, 2, 2, 2, 2}`。
+
+#### 6.3.4 inner_product
+
+计算两个向量的内积。
+
+#### 6.3.5 partial_sum
+
+`partial_sum` 是 C++ 标准库中定义在 `<numeric>` 头文件中的另一个函数模板，它用于计算给定范围内元素的部分和或累积结果，并将这些累积结果保存到另一个范围中。这个函数通常用于计算数列的累加和。
+
+函数的原型如下：
+
+```cpp
+template <class InputIterator, class OutputIterator>
+OutputIterator partial_sum(InputIterator first, InputIterator last, OutputIterator result);
+
+template <class InputIterator, class OutputIterator, class BinaryOperation>
+OutputIterator partial_sum(InputIterator first, InputIterator last, OutputIterator result, BinaryOperation binary_op);
+```
+
+第一个版本的 `partial_sum` 默认使用加法操作来计算累积和。第一个元素被复制到结果序列中，然后每个后续元素都是它自己与结果序列中前一个元素的和。
+
+第二个版本允许用户指定一个二元操作 `binary_op`，而不是使用默认的加法操作。这个操作用于计算结果序列中的每个元素。
+
+下面是一个使用 `partial_sum` 的例子：
+
+```cpp
+#include <iostream>
+#include <vector>
+#include <numeric> // for partial_sum
+
+int main() {
+    std::vector<int> v{1, 2, 3, 4, 5};
+    std::vector<int> sums(v.size());
+
+    // 计算部分和
+    std::partial_sum(v.begin(), v.end(), sums.begin());
+
+    // 输出结果
+    for (int sum : sums) {
+        std::cout << sum << ' ';
+    }
+    // 输出将会是：1 3 6 10 15
+    return 0;
+}
+```
+
+在这个例子中，`sums` 中的第一个元素是 `v` 中的第一个元素，然后每个后续元素是 `v` 中到该位置为止的所有元素的和。所以，对于输入序列 `{1, 2, 3, 4, 5}`，输出将会是 `{1, 3, 6, 10, 15}`。
+
+`partial_sum` 和 `adjacent_difference` 在某种意义上是相反的操作。如果你对一个数列使用 `adjacent_difference`，然后对结果使用 `partial_sum`，你将得到原始数列的一个拷贝（假设所有操作都是使用默认的加法和减法）。反之亦然，如果你先对一个数列使用 `partial_sum`，然后对结果使用 `adjacent_difference`，你也会得到原始数列的一个拷贝。
+
+#### 6.3.6 power
+
+SGI STL专属，并不属于STL标准库，计算某数的n幂次方。但是实际上是"对某数进行n次某种运算"，如果这个运算是乘法，则是计算其n次方。
+
+#### 6.3.7 iota
+
+SGI STL专属，将某个区间上的元素从另一个参数`value`的值开始填充，每次递增1。
+
+也就是说，`[first, last)`区间上的值会变为`value、value+1、value+2、...`
+
+这是一种质变算法。
+
+### 6.4 基本算法
+
+#### 6.4.1 运用实例
+
+代码在书中P306，不做解释。
+
+#### 6.4.2 equal、fill、fill_n、iter_swap、lexicographical_compare、max、min、mismatch、swap
+
+##### equal
+
+该函数接受两个区间，判断两个区间上对应位置的元素是否相等。返回`True`或`False`。
+
+##### fill
+
+将`[first, last)`区间上的元素全部填充新的值。
+
+##### fill_n
+
+将以`first`为起始位置的`n`个元素填充新的值。
+
+##### iter_swap
+
+交换两个迭代器指向的值。该函数中利用萃取技术萃取出了对象的类型，用来声明一个临时对象帮助交换两个迭代器指向的对象。
+
+##### lexicographical_compare
+
+以字典序对两个序列上的元素进行比较，返回的规则和字符串比较规则一样。
+
+##### max
+
+顾名思义。
+
+##### min
+
+顾名思义。
+
+##### mismatch
+
+比较两个序列，返回一个`pair`，指向两个序列中第一个元素不相等的位置。`pair.first`指向第一个序列中不匹配的位置，`pair.second`指向第二个序列中不匹配的位置。如果两个序列完全相等，则这两个指针都会指向对应序列的`end()`迭代器位置。
+
+##### swap
+
+顾名思义。
+
+#### 6.4.3 copy
+
+copy函数，执行的是复制的操作。对于某个对象而言，复制它要么就是使用`=`运算符，要么就是调用它的拷贝构造函数（`copy`函数使用的是`=`运算符的方式）。
+
+但是，有些元素类型拥有的是平凡拷贝赋值，如果对它们使用内存直接复制的方法，可以节约很多时间。
+
+copy算法将输入区间`[first, last)`上的元素复制到输出区间`[result, result + (last - first))`内，返回的是迭代器`result + (last - first)`。
+
+值得注意的一个问题是，如果输出区间和输入区间产生重合了怎么办？这可能招致错误，具体由迭代器的实现进行决定。
+
+copy函数对外提供的唯一接口是:
+
+```cpp
+template<class InputIterator, class OutputIterator>
+inline OutputIterator copy(InputIterator first, InputIterator last, OutputIterator result){
+	return __copy_dispatch<InputIterator, OutputIterator>()(first, last, result);
+}
+```
+
+此外，copy还包含两个特殊重载版本:
+
+```cpp
+inline char* copy(const char* first, const char* last, char* result){
+	memmove(result, first, last - first);
+	return result + (last - first);
+}
+inline wchar_t* copy(const wchar_t* first, const wchar_t* last, wchar_t* result){
+	memmove(result, first, sizeof(wchar_t) * (last - first));
+	return result + (last - first);
+}
+```
+
+显然，由于字符串以及宽字符串类型就是我们上面提到过的"拥有平凡拷贝赋值函数"的类型，因此直接进行内存拷贝即可。
+
+copy函数泛化中调用了` __copy_dispatch`函数，该函数具有一个完全泛化版本和两个偏特化版本：
+
+```cpp
+//完全泛化版本
+template<class InputIterator, class OutputIterator>
+class __copy_dispatch{
+	OutputIterator operator()(InputIterator first, InputIterator last, OutputIterator result){
+		return __copy(first, last, result, iterator_category(first));
+	}
+}
+//偏特化版本1
+template<class T>
+class __copy_dispatch<T*, T*>{
+    T* operator(T* first, T* last, T* result){
+        typedef typename __type_traits<T>::has_trivial_assignment_operator t;
+        return __copy_t(first, last, result, t());
+    }
+}
+//偏特化版本2
+template<class T>
+class __copy_dispatch<const T*, T*>{
+    T* operator(const T* first, const T* last, T* result){
+        typedef typename __type_traits<T>::has_trivial_assignment_operator t;
+        return __copy_t(first, last, result, t());
+    }
+}
+```
+
+为了说明它们的作用，我们分开讨论这些内容。
+
+首先来看看完全泛化的版本，它会萃取出迭代器的类型，进而调用不同版本的`__copy`。具体而言，它需要了解到元素迭代器是否提供了`RandomAccessIterator`级别的访问能力。
+
+如果具有该级别的访问能力，意味着该容器中的元素在内存上通常是连续的（`deque`稍有不同，但是也不至于太大区别），内存上连续就意味着可以通过`(last - first)`的方式计算出两个指针的偏移量，进而知道需要复制的元素个数`n`，以`n`作为循环的条件，提高效率。
+
+如果不具备该级别的访问能力，则容器内的元素在内存上不一定连续。我们只能使用`for(; first != last; first++)`的方式来进行循环，这样循环的效率就不如上面的了。
+
+这部分具体代码在书中P320。
+
+再来看看两个偏特化的版本，这两个偏特化的版本前提都是"参数为原生指针"，希望进一步了解到元素是否具有平凡的拷贝赋值运算符。
+
+如果拷贝赋值运算符是平凡的，意味着直接使用`memmove`进行内存上的复制即可完成操作。否则就只能循环逐个进行复制了。
+
+由于C++本身是无法知道一个对象是否具有平凡拷贝赋值运算符的，因此SGI STL中采用`__type_traits<T>`技术来萃取。
+
+#### 6.4.4 copy_backward
+
+这个函数的考虑和实现技巧和copy极为相似，因此不做过多解释。
+
+主要在于其功能，它的作用是将`[first, last)`区间上的元素，复制到以`result`为终点的位置上，实现的是逆向复制。
+
+也就是说，它实际上执行的是:
+
+```cpp
+*(result - 1) = *(last - 1);
+*(result - 2) = *(last - 2);
+...
+```
+
+需要注意的一点是，copy_backward要求接受的迭代器必须最少是`BidirectonalIterator`，才能够实现向前迭代。
+
