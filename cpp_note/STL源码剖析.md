@@ -2748,3 +2748,225 @@ void __unguarded_linear_insert(RandomAccessIterator last, T value){
 7. 最后，将 `value` 赋值给 `last` 所指向的位置，完成插入操作。
 
 总结来说，`__unguarded_linear_insert` 函数通过不断地将比要插入的值大的元素向右移动，为新元素腾出空间，直到找到合适的插入位置。这个过程不需要检查序列的起始边界，因为它假设除了最后一个元素外，序列已经是有序的，因此称之为“unguarded”（无边界检查）。
+
+##### Quick sort
+
+快速排序，是目前已知的最快的排序方法，平均时间复杂度为$O(N\log{N})$，最坏情况下会达到$O(n^2)$。
+
+快速排序的流程如下，假设`S`是待排序的序列：
+
+1. 如果`S`的元素个数为0或1，结束
+2. 取`S`中的任何一个元素作为哨兵节点。
+3. 将`S`分割为`L`和`R`两段，`L`中所有元素小于哨兵节点，`R`中所有元素大于哨兵节点。
+4. 对`L`和`R`递归执行快速排序
+
+##### 三点中值
+
+从常理来说，序列中的任何一个元素都可以作为哨兵节点。但是，为了避免"元素输入时不够随机"带来的恶化效应。最理想最稳妥的方法就是取序列的头、中、尾三个位置的元素，这就要求序列的迭代器至少是`RandomAccessIterator`.
+
+##### 快速排序的实现
+
+```python
+def quick_sort(nums, low, high):
+    if len(nums) <= 1:
+        return nums
+    if low < high:
+        pivot = partitionining(nums, low, high)
+        quick_sort(nums, low, pivot - 1)
+        quick_sort(nums, pivot + 1, high)
+    return nums
+
+def partitionining(nums, low, high):
+    pivot = nums[high]
+    i = low - 1
+    for j in range(low, high):
+        if nums[j] <= pivot:
+            i += 1
+            nums[i], nums[j] = nums[j], nums[i]
+    nums[i + 1], nums[high] = nums[high], nums[i + 1]
+    return i + 1
+
+nums = [7, 5, 3, 6, 8, 2, 1]
+print(quick_sort(nums, 0, len(nums) - 1))
+```
+
+这是一段快速排序的代码，我希望能够详细描述它的过程。
+
+首先，如果序列的长度小于等于1，说明是空列表或已经有序了，无需进行排序，直接返回即可。这也是我们上面提到的快速排序过程的第1个流程。
+
+否则，我们首先判断区间的有效性。如果是有效区间，那么就调用`partitionining`函数来做到一件事"确定一个合适的哨兵节点位置，使其左右满足小于大于的那个条件"。
+
+快排的唯一难点就在于怎么确定这个合适的哨兵节点以及确定它应该在的位置，书上采用了三点中值结合分割的方式，我这里姑且选用
+
+`pivot = nums[high]`，也就是采用最右边节点作为哨兵节点的方式。
+
+注意这里的`i = low - 1`，`i`的作用是什么呢？一句话来说就是"哨兵节点的左区间的右边界"。如果我们把`[low, high]`这个区间当做整个序列来看待，也就是说我们在最开始的情况下认为"哨兵节点的左区间是空的"，因此其右边界被初始化为`low - 1`。
+
+然后，我们循环整个`[low, high)`区间，注意这里的右开区间，因为我们已经选用`nums[high]`作为哨兵节点了，所以当然不需要判断它本身了。
+
+在这个`[low, high)`区间上，我们不断寻找小于哨兵节点的元素，也就是说处于"哨兵节点左区间"的元素，每找到一个，就意味着左区间的右边界`i`需要加上1来容纳这个新的小元素，然后将这个小于哨兵节点的元素和处于`nums[i]`位置的元素（`nums[i]`位置的元素一定是大于哨兵节点的，否则在之前的循环中它就会被"纳入"左区间，不会存在于边界上）进行交换，重复这个过程直到遍历整个区间。
+
+遍历完区间后，`i`就是哨兵节点左区间的右边界，`i + 1`自然而然就是哨兵节点应该在的位置。原先的`nums[i + 1]`也肯定是一个大于哨兵节点的元素（与上面同理，如果其小于哨兵节点早就被"纳入"了，不会存在边界上），交换位置哨兵节点就处于了合适的位置。
+
+最后，我们返回哨兵节点的位置，然后递归对哨兵节点的左右区间分别执行快速排序即可。
+
+##### threshold(阈值)
+
+如果在面对数据量较小的情况下，使用快速排序的效率反而可能不如插入排序。因为快速排序会产生大量的递归调用。
+
+因此，针对不同大小的序列采用不同的排序方式是有必要的。但是也没有一个明确的界限说明具体多大的序列采用哪种算法，具体还是因设备而异。
+
+##### final insertion sort
+
+如果我们将一个"几乎有序"的子序列做一次完整的插入排序，其效率往往更高。
+
+##### introsort
+
+全称`Introspective Sorting`，简称`IntroSort`。它在大部分情况下和使用了三点中值的`QuickSort`一样快，但是当分割行为可能导致分割后左右出现空区间情况时，又会采用`Heap Sort`来替代，其效率也比单纯使用`Heap Sort`更高。
+
+##### SGI STL Sort
+
+这部分书中代码在P397，这里给出简单解释。
+
+首先，`sort`仅适用于`RandomAccessIterator`。在`sort`的调用中，第一行内容为:`__introsort_loop(first, last, value_type(first), __lg(last - first) * 2)`。
+
+> 这行代码看起来是C++标准库中内省排序（introsort）算法的一部分。内省排序是一种混合排序算法，通常结合了快速排序、堆排序和插入排序的特点。它主要用于避免快速排序在最坏情况下的性能退化（即时间复杂度退化为O(n^2)）。
+>
+> 让我们分解这行代码：
+>
+> - `__introsort_loop`：这是内省排序算法的一个函数，它负责执行排序过程。在C++的STL（标准模板库）中，函数名前的双下划线通常表示这是一个内部函数，不应该由库的用户直接调用。
+>
+> - `first` 和 `last`：这两个参数通常表示要排序的序列的开始和结束迭代器。在C++中，迭代器用于访问容器中的元素，类似于指针。
+>
+> - `value_type(first)`：这是一个类型转换，它使用迭代器`first`来确定序列中元素的类型。`value_type`是一个类型特征，它从迭代器类型中提取出元素类型。
+>
+> - `__lg(last - first)`：这个表达式计算序列长度的对数值。`__lg`可能是一个计算对数的内部函数。对数通常用于确定快速排序的最大递归深度。在这里，`last - first`计算出序列中元素的数量。
+>
+> - `* 2`：这个操作将对数值乘以2，这样做可能是为了提供一个更大的递归深度限制，以避免快速排序退化到最坏情况。
+>
+> 综合来看，这行代码初始化内省排序算法，设置排序的范围（通过`first`和`last`迭代器），确定元素类型，并计算一个递归深度限制，然后开始排序过程。这个递归深度限制是基于序列长度的对数的两倍，这样做是为了在快速排序的递归深度过深时切换到堆排序，以保证整体的排序性能。
+
+然后，进入到`__introsort_loop`函数的内部逻辑中。
+
+这里首先判断序列中元素的个数是否超过`16`，如果没有超过16个元素，则认为是"较小的序列"，直接退出后执行`sort`函数中第二行的`final_insertion_sort`。
+
+否则，检查分割的层次是否超过了指定的层次，就改用`partial_sort`来替代。
+
+如果没有超过指定层次，便以三点中值法确定哨兵节点的位置，然后分割序列并递归调用`IntroSort`。
+
+#### 6.7.10 equal_range（应用于有序区间）
+
+该函数是二分查找的一个版本，试图在一个已排序区间中查找`value`，返回一对迭代器，分别指向`value`可以插入的第一个位置（`lower_bound`）和最后一个位置（`upper_bound`）。显然，这对迭代器之间的元素值一定都是`value`。
+
+如果序列中没有`value`这个元素，那么显然这对迭代器之间是一个"空区间"，但是它仍然可以插入在对应的`lower_bound`的位置。此时这对迭代器指向同一个位置。
+
+#### 6.7.11 implace_merge(应用于有序区间)
+
+```cpp
+template <class BidirectionalIterator>
+inline void inplace_merge(BidirectionalIterator first,
+	BidirectionalIterator middle,
+	BidirectionalIterator last) {
+	//其中一个序列为空，什么也不做
+	if (first == middle || middle == last) return;
+	__inplace_merge_aux(first, middle, last, value_type(first),
+		distance_type(first));
+}
+//辅助函数
+template <class BidirectionalIterator, class T, class Distance>
+inline void __inplace_merge_aux(BidirectionalIterator first,
+	BidirectionalIterator middle,
+	BidirectionalIterator last, T*, Distance*) {
+	Distance len1 = 0;
+	distance(first, middle, len1);
+	Distance len2 = 0;
+	distance(middle, last, len2);
+	//会使用额外的内存空间
+	temporary_buffer<BidirectionalIterator, T> buf(first, last);
+	if (buf.begin() == 0)//内存配置失败
+		__merge_without_buffer(first, middle, last, len1, len2);
+	else//在有暂时缓冲区的情况下进行
+		__merge_adaptive(first, middle, last, len1, len2,
+		buf.begin(), Distance(buf.size()));
+}
+//辅助函数，在有暂时缓冲区的情况下
+template <class BidirectionalIterator, class Distance, class Pointer>
+void __merge_adaptive(BidirectionalIterator first,
+	BidirectionalIterator middle,
+	BidirectionalIterator last, Distance len1, Distance len2,
+	Pointer buffer, Distance buffer_size) {
+	if (len1 <= len2 && len1 <= buffer_size) {
+		//case1:缓冲区足够安置序列一
+		Pointer end_buffer = copy(first, middle, buffer);
+		merge(buffer, end_buffer, middle, last, first);
+	}
+	else if (len2 <= buffer_size) {
+		//case2:缓冲区足够安置序列二
+		Pointer end_buffer = copy(middle, last, buffer);
+		__merge_backward(first, middle, buffer, end_buffer, last);
+	}
+	else {//case3:缓冲区不能安置任何一个序列
+		BidirectionalIterator first_cut = first;
+		BidirectionalIterator second_cut = middle;
+		Distance len11 = 0;
+		Distance len22 = 0;
+		if (len1 > len2) {//序列一比序列二长
+			len11 = len1 / 2;
+			advance(first_cut, len11);
+			second_cut = lower_bound(middle, last, *first_cut);
+			distance(middle, second_cut, len22);
+		}
+		else {//序列二比序列一长
+			len22 = len2 / 2;
+			advance(second_cut, len22);
+			first_cut = upper_bound(first, middle, *second_cut);
+			distance(first, first_cut, len11);
+		}
+		//旋转操作
+		BidirectionalIterator new_middle =
+			__rotate_adaptive(first_cut, middle, second_cut, len1 - len11,
+			len22, buffer, buffer_size);
+		//对左段递归调用
+		__merge_adaptive(first, first_cut, new_middle, len11, len22, buffer,
+			buffer_size);
+		//对右端递归调用
+		__merge_adaptive(new_middle, second_cut, last, len1 - len11,
+			len2 - len22, buffer, buffer_size);
+	}
+}
+```
+
+> 这段代码实现了一个模板函数 `inplace_merge`，它是一个C++ STL（标准模板库）算法，用于合并两个连续的、已排序的序列，使得合并后的整个序列也是有序的。这个函数不返回任何值，而是直接在原地修改输入的序列。这个算法通常用于归并排序的最后一步，即合并两个已排序的子序列。
+>
+> 代码中的 `inplace_merge` 函数接受三个迭代器参数：`first`、`middle` 和 `last`。这三个迭代器将容器分为两个部分：从 `first` 到 `middle` 的第一个序列和从 `middle` 到 `last` 的第二个序列。这两个序列必须已经是有序的。
+>
+> 接下来，代码中的 `__inplace_merge_aux` 辅助函数被调用，它计算两个序列的长度，并尝试创建一个临时缓冲区。如果能够成功创建缓冲区，它会调用 `__merge_adaptive` 函数；如果不能，则调用 `__merge_without_buffer` 函数（后者在这段代码中没有给出）。
+>
+> `__merge_adaptive` 函数是一个递归函数，它根据缓冲区的大小和两个序列的长度来决定合并策略：
+>
+> - 如果第一个序列的长度小于等于缓冲区大小，它会将第一个序列复制到缓冲区中，然后使用 `merge` 函数将缓冲区中的序列和第二个序列合并到原来的位置。
+> - 如果第二个序列的长度小于等于缓冲区大小，它会将第二个序列复制到缓冲区中，然后使用 `__merge_backward` 函数（在这段代码中没有给出）将第一个序列和缓冲区中的序列合并到原来的位置。
+> - 如果缓冲区不能容纳任何一个序列，它会找到一个合适的分割点，将两个序列进一步分割为更小的子序列，然后对这些子序列递归调用 `__merge_adaptive` 函数。
+>
+> 在递归过程中，`__rotate_adaptive` 函数（在这段代码中没有给出）可能被用于调整序列中元素的位置，以便于合并。
+>
+> 总的来说，这段代码是一个复杂的合并算法，它优化了内存使用并尽可能地在原地进行合并操作，以减少不必要的数据复制。这种算法在处理大数据集时非常有用，因为它可以显著减少内存消耗和提高效率。
+
+> 当缓冲区空间不足以容纳任何一个序列时，`__merge_adaptive` 函数采取了一种分而治之的策略。这种情况下，算法会尝试找到一个方法，通过递归地将问题分解成更小的部分来解决。这里的关键在于使用二分搜索来找到合适的分割点，以便将每个序列进一步分割成更小的子序列，然后对这些子序列进行合并操作。
+>
+> 下面是详细的步骤：
+>
+> 1. **确定分割点**：
+>    - 如果第一个序列（`first` 到 `middle`）的长度大于第二个序列（`middle` 则 `last`），算法会计算第一个序列的中点（长度的一半），这是为了找到一个分割点 `first_cut`，使得在这个点之前的元素都小于等于 `middle` 到 `last` 序列中的元素。
+>    - 如果第二个序列更长，算法会计算第二个序列的中点，找到一个分割点 `second_cut`，使得在这个点之后的元素都大于等于 `first` 到 `middle` 序列中的元素。
+>
+> 2. **使用二分搜索**：
+>    - 对于较长的序列，算法使用二分搜索（`lower_bound` 或 `upper_bound`）在另一个序列中找到与分割点对应的元素。这样做是为了保持合并后序列的有序性。
+>
+> 3. **旋转序列**：
+>    - 使用 `__rotate_adaptive` 函数将 `first_cut` 到 `middle` 与 `middle` 到 `second_cut` 之间的元素进行旋转，使得 `first_cut` 到 `second_cut` 成为新的连续序列。这样做的目的是为了将两个将要合并的子序列放在一起，以便于后续的合并操作。
+>
+> 4. **递归合并**：
+>    - 现在，原始的两个序列被分割成了更小的子序列。算法对这些子序列递归调用 `__merge_adaptive` 函数，直到子序列足够小，可以被放入缓冲区中进行合并。
+>
+> 通过计算序列的一半长度并使用二分搜索，算法可以有效地找到合适的分割点，这样在递归过程中每次都能处理大致相等大小的子序列。这种方法有助于保持算法的效率，并且在合并过程中保持序列的有序性。
