@@ -3248,3 +3248,187 @@ functor adapter的价值在于，通过它们之间的绑定、组合、修饰�
 copy(source.rbegin(), source.rend(), destination.begin());
 ```
 
+这会将`source`容器中的元素按逆向的顺序复制到`destination`容器的起始位置处。
+
+而在STL的容器实现中，逆向迭代器的声明以及相关的逆向操作通常通过如下方式实现:
+
+```cpp
+typedef reverse_iterator<iterator> reveser_iterator;
+reverse_iterator rbegin(){
+	return reverse_iterator(end());
+}
+reverse_iterator rend(){
+	return reverse_iterator(begin());
+}
+```
+
+不存在任何例外，对于任何提供了双向迭代器以及更高层次迭代器级别的容器，它们的逆向迭代器相关的内容都是这样实现的。
+
+而对于单向序列`slist`，自然也不提供逆向迭代器。对于`stack、queue、priority_queue`这样的容器也是如此，它们没有提供`begin()、end()`，自然也不存在逆向迭代器。
+
+另外一点值得注意的是，`end()`在迭代器语义中指的是"指向容器的尾端，即最后一个元素后面的位置"。也就是说，容器实际包含元素是一个左闭右开区间，即`[begin(), end())`，如果我们用`end()`初始化逆向迭代器的`begin`，那么我们显然不能使用`*rbegin()`来取出最后一个元素值了，因为这样的操作是没有意义的。
+
+事实真的如此吗？并不是。从`reverse_iterator`迭代器类的实现中我们可以看到这样的函数:
+
+```cpp
+template<class Iterator>
+class reverse_iterator{
+    protected:
+    	Iterator current; //记录对应的正向迭代器
+    public:
+    	...
+        reverse_iterator(){}
+    	explicit reverse_iterator(iterator_type &x): current(x){}
+    	reverse_iterator(const self& x): current(x.current){}
+        reference operator*() const{
+            Iterator tmp = current;
+            return *--tmp;
+        }
+};
+```
+
+<font color="red">关键之处就在于此，当我们对逆向迭代器进行取值操作时，实际上返回的值却是"将当前记录的迭代器后退一个位置进行取值"。</font>
+
+#### 8.3.3 stream iterator
+
+所谓的`stream iterator`，就是可以将迭代器绑定到一个流对象身上。当我们将迭代器绑定到输入流对象时，就是`istream iterator`。相对应的，当我们保存到输出流对象上时，就是`ostream iterator`。
+
+其实绑定一个流对象，就是在`stream iterator`的内部维护一个流成员。当我们调用类似`++`这样的操作时，就是从流中读取一次数据。例如，`istream iterator`的`++`操作就是调用流的输入操作，由于是`input iterator`，因此它不具备`--`操作。
+
+书中P442给出了代码，这里给出一些解释。
+
+首先，`istream iterator`的迭代器类型被标识为`input_iterator_tag`。当调用它的无参构造函数时，输入流被默认为是一个`cin`流对象，并将其是否能够读取内容的标记`end_marker`初始化为`false`。而当我们提供了输入流作为参数时，则会用该参数来初始化成员指针（一个`istream*`指针），然后在构造函数内调用`read()`函数。
+
+`read()`函数内部首先判断流是否能够进行读取，如果可以读取，则读取一次数据并将其保存到迭代器的数据域`value`中。读取完毕后再进行一次流是否能够读取的判断来给`end_marker`赋值。
+
+而在`operator++`函数中，也是通过调用`read()`函数的方式来读取一次数据。只不过`operator++()`返回读取后的`*this`，而`operator++(int)`返回读取前的迭代器。
+
+<font color="red">这部分代码中最重要的一个点是，只要我们创建了一个`istream iterator`并将其绑定在某个`istream`对象上，就会立马调用`read()`函数使得程序中断在此并等待一个输入。因此，只有当我们非常确定我们需要在某次读取数据时，我们才应该创建一个`istream iterator`。</font>
+
+至于`ostream iteator`，其实现和`istream iterator`原理一致。只不过对应的是输出流迭代器而已。其实现代码在书中P445，这里给出简单解释。
+
+同样的，`ostream iterator`的迭代器类型被标识为`output_iterator_tag`。它并没有无参构造函数，而是提供了一个包含输出流参数的构造函数和一个包含输出流以及间隔符（这是一个`const char*`类型的参数）参数的构造函数。如果定义`ostream iterator`时没有提供间隔符这个参数，则默认的间隔符为空。
+
+当我们调用输出流迭代器的赋值，即`operator=`时，其内部会将参数（也就是赋值表达式的右值）输出到输出流中。如果我们创建输出流对象时定义了间隔符号，则还会输出一个间隔符号。
+
+而对于`operator *、operator++()、operator++(int)`这三个参数，则都是返回迭代器本身，并不做任何操作。
+
+### 8.4 function adapter
+
+所谓函数适配器，我个人的理解是通过一些仿函数的组合，形成一个表达式。这个表达式通常接受一元谓词或者二元谓词，返回表达式运算后的结果。
+
+在这里，书中给出了一个例子：
+
+```cpp
+count_if(iv.begin(), iv.end(), bind2nd(less<int>(), 12));
+```
+
+这实际上就是结合了仿函数组合形成表达式进行实际调用的例子，总的来说，注意这部分：
+
+```cpp
+bind2nd(less<int>(), 12)
+```
+
+`bind2nd`是一个仿函数，它接受两个参数进行仿函数对象的创建。其中第一个参数用于内部对象`op`的初始化，第二个参数用来内部对象`value`的初始化。
+
+注意，`count_if`函数的声明为:
+
+```cpp
+template <class InputIterator, class UnaryPredicate>
+typename iterator_traits<InputIterator>::difference_type
+count_if(InputIterator first, InputIterator last, UnaryPredicate pred);
+```
+
+这里的重点在于，`count_if`函数接受的是一个一元谓词的对象。如果我们想要实现"在迭代器范围内找到所有小于12的数"，这其实需要的是一个一元谓词的结果，用来得到"当前值是否小于12"。
+
+而`less<int>()`是一个二元谓词对象，接受两个参数`x`和`y`，返回`x < y `的结果。
+
+因此，为了得到一个一元谓词表达式。我们用`bind2nd(less<int>, 12)`。使用`less<int>()`对象和`12`分别初始化`op`和`value`。因此调用了`bind2nd`的`operator()`，最后返回的是`return op(x, value)`，注意这里的`value`就是12，`op`就是`less<int>`。因此实际执行的就是`return less<int>(x, 12)`。
+
+#### 8.4.1 对返回值进行逻辑否定： not1，not2
+
+这部分书中代码在P451，这里给出简单说明。
+
+其实很简单，`not1`接受一个一元谓词作为参数，初始化内部的`pred`参数。它的`operator()`函数内返回`!pred(x)`的结果，对表达式的结果取反并返回。
+
+而`not2`则类似，接受一个二元谓词作为参数初始化内部的`pred`参数，它的`operator()`函数返回`!pred(x, y)`的结果，对表达式的结果取反并返回。
+
+#### 8.4.2 bind1st, bind2nd
+
+类似于上面对`count_if`函数的解释，这里其实不用再过多的解释。这里演示一下`bind1st`的"所有小于12的数"的用法：
+
+````cpp
+count_if(iv.begin(), iv.end(), bind1st(greater<int>(), 12));
+````
+
+#### 8.4.3 compose1, compose2
+
+这部分并不是STL标准的内容，而是SGI STL的私产。
+
+简而言之，如果我们有`h = f(g(x))`，那么`compose1`用于生成表达式`h()`。
+
+它接受两个一元谓词作为参数，参数分别用来初始化`op1`和`op2`。它的`operator()`返回的是`op1(op2(x))`。
+
+#### 8.4.4 用于函数指针： ptr_fun
+
+这部分代码在书中P455。
+
+简单来说，这部分代码提供了一个包装。用来将一个简单的函数指针包装成一个函数适配器对象，其内部通过`operator()`函数来调用对应的函数。通过模板参数来传递函数本身的参数类型和返回值。
+
+注意，它最多只能接受需要两个参数的函数指针。如果函数需要更多的参数，则无法使用函数适配器来进行包装。
+
+#### 8.4.5 用于成员函数的指针: mem_fun，mem_fun_ref
+
+考虑一下某种情况，假如我们针对某种自定义类型`Shape`的对象提供了`operator<`来比较它们的大小。现在我们希望通过`sort`来对某个容器中的这些对象进行排序，会这样调用：
+
+```cpp
+sort(v.begin(), v.end(), Shape::operator<);
+```
+
+这显然是不可行的，因为成员函数对象需要与特定的对象实例进行使用。<font color="red">注意，这里的重点并不是说成员函数指针不能传递给`sort`，而是说成员函数依赖于某个成员作为`*this`来进行`operator<`的调用。</font>
+
+因此我们就有了用于成员函数指针的适配器，它接受一个成员函数指针作为参数，将其赋值给内部参数`f`，`f`是一个函数指针，它的定义是`S (T::*f)()`，看上去有点复杂，这里给出一些解释：
+
+> 表达式 `S (T::*f)();` 在 C++ 中定义了一个指向成员函数的指针。这里，`f` 是指针的名称，`T` 是拥有该成员函数的类的类型，而 `S` 是该成员函数的返回类型。成员函数本身是没有参数的，这由空的圆括号 `()` 表示。
+>
+> 让我们分解一下这个声明：
+>
+> - `T`：成员函数所属的类类型。
+> - `S`：成员函数的返回类型。
+> - `f`：指向成员函数的指针的名称。
+> - `()`：表示该成员函数不接受任何参数。
+>
+> 这个声明表示 `f` 是一个指针，它可以指向 `T` 类型的对象的一个成员函数，该成员函数没有参数并返回 `S` 类型的值。
+>
+> 例如，如果你有一个类 `MyClass` 和一个返回 `int` 类型的成员函数 `myFunc`：
+>
+> ```cpp
+> class MyClass {
+> public:
+>     int myFunc();
+> };
+> ```
+>
+> 你可以这样声明一个指向该成员函数的指针：
+>
+> ```cpp
+> int (MyClass::*funcPtr)();
+> ```
+>
+> 然后，你可以将 `myFunc` 的地址赋给 `funcPtr`：
+>
+> ```cpp
+> funcPtr = &MyClass::myFunc;
+> ```
+>
+> 现在，`funcPtr` 指向 `MyClass` 的成员函数 `myFunc`。要通过指针调用这个成员函数，你需要一个 `MyClass` 类型的对象：
+>
+> ```cpp
+> MyClass obj;
+> int result = (obj.*funcPtr)(); // 调用 obj 的 myFunc 成员函数
+> ```
+>
+> 成员函数指针在 C++ 中是一种高级特性，它们允许程序员将类的成员函数的调用延迟到运行时，这为编写通用代码和回调机制提供了灵活性。
+
+注意，上面这个版本是成员函数"没有任何参数，通过对象指针进行调用， 成员函数非const"的版本。成员函数适配器允许成员函数最多接受一个参数。因此根据上面三种情况的不同，总共有`2^3=8`种组合，STL都为它们定义了成员函数适配器。
+
