@@ -2970,3 +2970,281 @@ void __merge_adaptive(BidirectionalIterator first,
 >    - 现在，原始的两个序列被分割成了更小的子序列。算法对这些子序列递归调用 `__merge_adaptive` 函数，直到子序列足够小，可以被放入缓冲区中进行合并。
 >
 > 通过计算序列的一半长度并使用二分搜索，算法可以有效地找到合适的分割点，这样在递归过程中每次都能处理大致相等大小的子序列。这种方法有助于保持算法的效率，并且在合并过程中保持序列的有序性。
+
+#### 6.7.12 nth_element
+
+> `nth_element` 是 C++ 标准库算法中的一个函数，它定义在 `<algorithm>` 头文件中。这个函数重新排列元素，使得序列中的第 n 个位置的元素（以0为起始索引）会是如果序列被完全排序后该位置上的元素。同时，它保证第 n 个位置之前的所有元素都不大于该位置上的元素，而第 n 个位置之后的所有元素都不小于该位置上的元素。
+>
+> 换句话说，`nth_element` 可以用来部分排序一个序列，使得位于第 n 个位置的元素放置在它最终排序后的确切位置，而不保证其他元素的顺序。这通常比完全排序整个序列要快，特别是当你只对序列中某个特定位置的元素感兴趣时。
+>
+> 这个函数接受三个参数：第一个和第二个参数定义了要操作的序列的范围（起始迭代器和结束迭代器），第三个参数是一个迭代器，指向序列中的第 n 个位置。
+>
+> 例如，下面的代码会将 `v` 中的元素重新排列，使得第三个元素（索引为2的元素）是如果整个序列排序后应该在该位置上的元素，同时保证索引为2之前的所有元素都不大于索引为2的元素，索引为2之后的所有元素都不小于索引为2的元素：
+>
+> ```cpp
+> #include <algorithm>
+> #include <vector>
+> #include <iostream>
+> 
+> int main() {
+>     std::vector<int> v = {5, 2, 6, 4, 3, 1};
+>     std::nth_element(v.begin(), v.begin() + 2, v.end());
+> 
+>     for (int x : v) {
+>         std::cout << x << ' ';
+>     }
+>     std::cout << '\n';
+> 
+>     return 0;
+> }
+> ```
+>
+> 在这个例子中，输出可能是 `2 1 3 4 6 5`，这里的 `3` 就是原序列完全排序后索引为2的元素。注意，除了第三个位置的元素，其他元素的顺序是不确定的。
+
+注意，这个算法仅接受`RandomAccessIterator`.
+
+#### 6.7.13 merge_sort
+
+归并排序，简而言之就是使用分治策略将要排序的区间划分为子区间，在子区间上递归调用归并排序划分子区间。直到子区间大小为0或1时，认为其是有序的。然后调用inplace_merge将它们进行合并。
+
+## 7. 仿函数（函数对象）
+
+### 7.1 仿函数概观
+
+就实现意义上来说，函数对象这个名称更为贴切："具有函数特性的对象"，也就是说它可以像函数一样接受一些参数并调用。这样的操作显然是通过重写`operator()`来实现的。
+
+仿函数的作用体现在什么地方？简单来说，我们调用的许多STL算法都提供两个版本。一个版本表现出该算法的正常表现，另一个版本则允许我们指定一个仿函数作为参数，实现某个特定的操作（比如`sort`）。
+
+从我过往的经历来说，对于这样的函数(指的是sort这样的)调用我通常都是定义一个函数，再将函数指针传递给函数进行调用。那么为什么不用函数指针来实现STL算法的第二个版本呢？
+
+原因很简单，函数指针不能满足STL对抽象性的要求，也不具备足够的泛化性。
+
+STL仿函数的分类，如果以操作数的个数划分，则可以分为一元或二元仿函数。如果以功能划分，则可以分为算数运算，关系运算以及逻辑运算三大类。
+
+### 7.2 仿函数可配接的关键
+
+仿函数应该具备与适配器串接的能力，也就是说当我们在适配器中提供了某个包含仿函数作为参数的函数实现时，我们需要获得一些关于仿函数的信息，以供帮助我们具体实现适配器在不同仿函数参数下的具体功能。
+
+听上去有点绕口，但是其实它的实现也是通过"定义相应的类型参数"来得到的。就好比我们的`advance`函数的实现一样，如果我们提供的是`RandomAccessIterator`，那么我们通过获得相应的类型参数并调用`iterator += n`就可以了，针对不同类型有不同的操作。
+
+仿函数的类型参数主要用来表现函数参数类型以及返回值的类型，为了方便起见，STL中定义了两个class来分别代表接受一个参数的一元仿函数和接受两个参数的二元仿函数。
+
+##### 7.2.1 unary_function
+
+`unary_function`用来呈现一元函数的参数类型和返回值类型，其定义为:
+
+```cpp
+template<class Arg, class Result>
+class unary_function{
+	typedef Arg argument_type;
+	typedef Result result_type;
+}
+```
+
+一旦某个仿函数继承了该类，那么就可以通过这样的方式来得到或使用参数类型或返回值类型:
+
+```cpp
+template<class T>
+void negate: public unary_function<T, T>{
+	T operator()(const T& x) const{
+		return -x;
+	}
+};
+//或者:
+template<class Predicate>
+class unary_negate{
+    public:
+    	bool operator()(const typename Predicate::argument_type& x) const{
+            ...
+        };
+};
+```
+
+##### 7.2.2 binary_function
+
+`binary_function`用来呈现二元函数的第一、第二参数类型，以及返回值类型。
+
+### 7.3 算术类仿函数
+
+代码在书中P418，主要就是演示了一些仿函数具体如何继承一元和二元仿函数类。
+
+##### 证同元素
+
+如果一个数值`A`与该元素做`op`运算，得到`A`自身，则称该元素为证同元素。显然，加法的证同元素为0。
+
+### 7.4 关系运算类运算符
+
+代码在书中P420，主要演示了一些二元运算的仿函数继承。
+
+### 7.5 逻辑运算类仿函数
+
+与上面类似，代码在书中P422，演示了一些一元和二元运算的仿函数。
+
+### 7.6 证同、选择、投射
+
+书中代码在P423，这里简单的介绍了一些仿函数的实现。不论它们继承的是一元还是二元仿函数类，它们做的都只是传回某个参数本身。这样做是为了增加一层间接性，使得这些操作得以抽象起来，从而实现更良好的兼容性。
+
+## 8. 适配器
+
+将一个类的接口转换为另一个类的接口，使得原本因为接口不兼容而不能合作的类可以一起运作，这就是适配器。
+
+### 8.1 适配器的概念与分类
+
+STL中提供的适配器大致分为三类，应用于仿函数改变其接口者称为`function adapter`，应用于容器改变其接口者称为`container adapter`，应用于迭代器改变器接口者称为`iterator adapter`。
+
+#### 8.1.1 container adapter
+
+STL中提供的两个容器，`queue`和`stack`，底层都是采用`deque`具体实现，容器本身只是改变接口提供不同的操作，这两个容器在第4章介绍过。
+
+#### 8.1.2 iterator adapter
+
+##### insert iterator
+
+该迭代器的主要作用在于，将一般迭代器的赋值操作转换为插入操作。这样的迭代器包括了专职尾端插入的`back_insert_iterator`，专职头端插入的`front_insert_iterator`，以及从任意位置插入的`insert_iterator`。
+
+为了提供使用时的便利性，STL对它们进行了封装，封装成三个函数：`back_inserter`、`front_inserter`和`inserter`，它们分别接受对应的容器作为参数（`inserter`还接受一个迭代器作为参数），返回对应的插入迭代器。
+
+##### reverse iterator
+
+顾名思义，反向迭代器。常规的`operator++`使得一般迭代器向后迭代一个位置，而对于反向迭代器，它会使得迭代器向`begin`的方向靠近一个位置（假设它本身不在`begin`位置的情况下）。
+
+##### IOstream iterator
+
+该迭代器的作用在于，将迭代器绑定到某个iostream对象身上，使其拥有输入或输出的功能。
+
+> `iostream` 迭代器在C++中是用来提供对输入输出流的迭代访问的工具。C++标准库提供了两种类型的 `iostream` 迭代器：`istream_iterator` 和 `ostream_iterator`。
+>
+> 1. `istream_iterator`：这是一个输入迭代器，用于从输入流（如 `std::cin` 或文件流）读取连续的值。它可以与标准算法一起使用，例如 `std::copy`，来从流中读取数据并将其存储在容器中。例如，可以使用 `istream_iterator` 从 `std::cin` 读取整数并将它们存储在 `std::vector` 中。
+>
+> 2. `ostream_iterator`：这是一个输出迭代器，用于向输出流（如 `std::cout` 或文件流）写入连续的值。它可以与标准算法一起使用，例如 `std::copy`，来将容器中的数据输出到流中。例如，可以使用 `ostream_iterator` 将 `std::vector` 中的整数写入到 `std::cout`。
+>
+> 这些迭代器使得输入输出操作可以很方便地与标准算法结合，提高了代码的抽象级别和复用性。下面是一个简单的例子，展示了如何使用 `istream_iterator` 和 `ostream_iterator`：
+>
+> ```cpp
+> #include <iostream>
+> #include <iterator>
+> #include <vector>
+> #include <algorithm>
+> 
+> int main() {
+>     // 使用 istream_iterator 从标准输入读取整数
+>     std::istream_iterator<int> start(std::cin), end;
+>     std::vector<int> numbers(start, end);
+> 
+>     // 使用 ostream_iterator 将整数输出到标准输出
+>     std::ostream_iterator<int> out_it(std::cout, ", ");
+>     std::copy(numbers.begin(), numbers.end(), out_it);
+> 
+>     return 0;
+> }
+> ```
+>
+> 在这个例子中，整数从标准输入读取并存储在一个 `std::vector` 中，然后使用 `std::copy` 和 `ostream_iterator` 将它们输出到标准输出，每个整数后面跟着一个逗号。
+
+#### 8.1.3 functor adapter
+
+functor adapter的价值在于，通过它们之间的绑定、组合、修饰能力，几乎可以无限制的创造出各种可能的表达式，搭配STL算法一起使用。
+
+还是相较于函数指针，当我们希望针对某个STL算法提供某个特定操作（通常情况下是对自定义的对象求和或排序）时，我们通过函数指针的方式传递特定操作。这对于后续维护及修改代码都可能是不利的，我们需要去修改函数中的实现来修改我们的操作。
+
+而使用仿函数，则代码变得更为可读，一目了然，具体如下：
+
+> 在C++中，仿函数（也称为函数对象）是一个行为类似函数的对象，它通过重载 `operator()` 来实现。仿函数可以像普通函数一样被调用，但与普通函数相比，它们拥有可以保持状态的能力。
+>
+> 仿函数适配器（Function Adaptor）是一种特殊的对象，它用于改变、扩展或适配一个已有的仿函数或函数指针的接口。这样做的目的是为了使仿函数或函数指针能够与其他不兼容的代码（如算法或容器）一起工作。标准库中提供了几种仿函数适配器，例如 `not1`, `not2`, `bind1st`, `bind2nd` 等。
+>
+> 这些适配器可以用来：
+>
+> - 反转一个谓词的结果（`not1`, `not2`）。
+> - 将二元函数适配为一元函数（`bind1st`, `bind2nd`），通过固定函数的一个参数。
+>
+> 例如，假设你有一个二元谓词函数 `less<int>`，你可以使用 `bind2nd` 来创建一个新的一元谓词，这个新的谓词将检查一个值是否小于一个特定的值：
+>
+> ```cpp
+> #include <functional>
+> #include <algorithm>
+> #include <vector>
+> #include <iostream>
+> 
+> int main() {
+>     std::vector<int> v = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+>     // 使用 bind2nd 创建一个新的一元谓词，检查元素是否小于 5
+>     std::vector<int>::iterator it = std::find_if(v.begin(), v.end(), std::bind2nd(std::less<int>(), 5));
+>     if (it != v.end()) {
+>         std::cout << "First element less than 5: " << *it << std::endl;
+>     }
+>     return 0;
+> }
+> ```
+>
+> 然而，需要注意的是，随着C++11的引入，许多仿函数适配器已经被新的特性所取代，如 `std::bind` 和 lambda 表达式。这些新特性提供了更强大、更灵活的方式来创建和使用函数对象。例如，上面的代码可以使用 C++11的特性进行重写，如下：
+>
+> ```cpp
+> #include <algorithm>
+> #include <vector>
+> #include <iostream>
+> 
+> int main() {
+>     std::vector<int> v = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+>     // 使用 lambda 表达式来替代 bind2nd
+>     std::vector<int>::iterator it = std::find_if(v.begin(), v.end(), [](int i) { return i < 5; });
+>     if (it != v.end()) {
+>         std::cout << "First element less than 5: " << *it << std::endl;
+>     }
+>     return 0;
+> }
+> ```
+>
+> 在现代C++编程中，推荐使用 lambda 表达式和 `std::bind`，因为它们更加灵活且易于理解。
+
+### 8.2 container adapter
+
+这部分内容其实与8.1.1重合，不再介绍。
+
+### 8.3 iterator adapter
+
+这部分研究了`iterator adapter`的实现细节。
+
+#### 8.3.1 insert iterator
+
+首先，迭代器的内部必须维护一个容器，这当然是为了知道我们的迭代器究竟在对哪个容器执行操作。
+
+而对于`insert iterator`，它所维护的是哪个容器在用户创建时通过参数进行指定。当用户对插入迭代器执行赋值操作时，在迭代器的内部就变成了插入操作。
+
+也就是说，`insert_iterator`的内部实际调用了容器的`push_back`，`push_front`或`insert`函数来执行插入操作，而对于迭代器的常规功能`++、--、*、->`等，`insert iterator`都被关闭了这些功能。因此其类型为`output_iterator_tag`。
+
+接着是`back_insert_iterator`的实现，代码在书中P435，这里给出一些关键笔记：
+
+首先，迭代器类的实现中提供了一个模板参数`Container`，这是为了得到容器的类型。在内部提供了一个`Container *`的指针，它在该类的构造函数中被成员列表初始化语法初始化指向用户向参数中提供的容器，且该构造函数是`explicit`的，只能显式调用。
+
+关键部分在于`operator=`里的具体实现，`back_insert_iterator`的`operator=`实现中转调用了`Container->push_back`，实现了尾端插入的操作。
+
+这里有一个问题，<font color="red">既然我可以直接通过`container->push_back`来实现尾端插入，为什么还要用`back_insert_iterator`？</font>
+
+> 使用 `container.push_back()` 方法直接向容器的尾部插入元素是非常直观和简单的。然而，`back_insert_iterator` 是一个迭代器适配器，它提供了几个额外的好处，尤其是在使用标准库算法时：
+>
+> 1. **算法兼容性**：很多标准库算法，如 `std::copy`, `std::transform`, `std::generate` 等，都是通过迭代器来操作容器的。`back_insert_iterator` 允许这些算法与支持 `push_back` 的容器（如 `std::vector`, `std::list`, `std::deque`）一起使用，而不需要修改算法本身。
+> 2. **代码一致性**：使用 `back_insert_iterator` 可以让你的代码风格与使用其他迭代器时保持一致，这样可以使得代码更加整洁和一致。
+> 3. **插入操作抽象**：`back_insert_iterator` 抽象了插入操作，使得你可以将关注点放在处理算法逻辑上，而不是如何将元素插入到容器中。这样可以使得代码更加清晰和易于维护。
+> 4. **无需关心容器大小**：当使用 `back_insert_iterator` 时，你不需要预先调整容器大小或担心容器容量问题，因为插入操作会自动调用 `push_back`，必要时容器会自动扩容。
+>
+> 例如，如果你想要复制一个容器 `source` 中的所有元素到另一个容器 `destination`，你可以这样做：
+>
+> ```cpp
+> std::copy(source.begin(), source.end(), std::back_inserter(destination));
+> ```
+>
+> 这行代码不需要知道 `destination` 的当前大小，也不需要预先调整它的大小。使用 `back_inserter` 会自动为每个新元素调用 `push_back`，这使得代码更加简洁和灵活。
+
+这里的`copy`函数的调用其实就说明了一切了，如果我们的`destination`是一个固定大小的容器，通过`std::copy(source.begin(), source.end(), destination.begin());`这样的方式复制数据过去，我们甚至还要担心容器大小问题。而如果使用尾端插入，那么大小问题就由容器内部的实现来决定了。
+
+<font color="blue">后面还有`front_insert_iterator`以及`insert_iterator`的实现，但是具体大差不差，就不过多介绍了。</font>
+
+#### 8.3.2 reverse iterator
+
+逆向迭代器，考虑这样的操作:
+
+```cpp
+copy(source.rbegin(), source.rend(), destination.begin());
+```
+
