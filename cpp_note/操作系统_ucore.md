@@ -1091,9 +1091,81 @@ CPU执行操作系统代码时，CPU处于内核态（又称管态），2.2介�
       > 需要补充的是，GPT（GUID Partition Table）是一个较新的分区格式，它支持超过2TB的硬盘和多于4个的主分区。GPT分区格式的硬盘也有一个保护MBR，位于硬盘的第一个扇区，但它的结构和目的与传统MBR不同。GPT的实际分区表和引导数据位于硬盘的其他部分。
       >
       > 此外，对于GPT分区格式，引导数据通常位于EFI系统分区（ESP），这是一个特殊的分区，用于存储UEFI引导加载器和相关数据，而不是传统的MBR引导代码。
-      >
-
    
-
+   ### 练习二
    
+   为了熟悉使用qemu和gdb进行的调试工作，我们进行如下的小练习：
+   
+   1. 从CPU加电后执行的第一条指令开始，单步跟踪BIOS的执行。
+   2. 在初始化位置0x7c00设置实地址断点,测试断点正常。
+   3. 从0x7c00开始跟踪代码运行,将单步跟踪反汇编得到的代码与bootasm.S和 bootblock.asm进行比较。
+   4. 自己找一个bootloader或内核中的代码位置，设置断点并进行测试。
+   
+   在这里，我会逐个解释这些任务是如何完成的。
+   
+   1. CPU加电后的第一条指令，指的就是CPU加电时它的代码段寄存器（CS）和当前指令指针（EIP）指向的段：偏移地址，这是一个线性地址，在没有启动页机制的情况下它也是一个物理地址。这个物理地址指向了`0xffff0`这个地址，这是加电后执行的第一条指令的位置。
+   
+      那么，如何进行单步跟踪呢？首先我们需要注意到，在`Makefile`中有这么一段：
+   
+      ```makefile
+      debug: $(UCOREIMG)
+      	$(V)$(QEMU) -S -s -parallel stdio -hda $< -serial null &
+      	$(V)sleep 2
+      	$(V)$(TERMINAL)  -e "cgdb -q -x tools/gdbinit"
+      
+      这段代码是一个Makefile脚本的一部分，通常用于自动化编译和调试过程。它定义了一个名为`debug`的目标，该目标用于启动QEMU模拟器以运行和调试一个名为`$(UCOREIMG)`的操作系统镜像。下面是每一行代码的详细解释：
+      
+      1. `debug: $(UCOREIMG)`
+         这行定义了一个Makefile规则的目标`debug`，它依赖于变量`$(UCOREIMG)`。这通常意味着在执行`debug`目标之前，`$(UCOREIMG)`需要被创建或是最新的。
+      
+      2. `$(V)$(QEMU) -S -s -parallel stdio -hda $< -serial null &`
+         这行代码执行QEMU命令来启动一个虚拟机：
+         - `$(V)`和`$(QEMU)`是Makefile变量，它们可能被定义为控制命令的可视化输出和QEMU的路径。
+         - `-S`参数告诉QEMU在启动时暂停CPU的执行，等待调试器的连接。
+         - `-s`参数是一个便捷选项，它创建了一个GDB服务器监听在默认的TCP端口1234上。
+         - `-parallel stdio`可能是将QEMU的并行端口重定向到标准输入输出。
+         - `-hda $<`指定了要使用的硬盘镜像，`$<`是Makefile的自动变量，它代表规则依赖中的第一个项，在这里是`$(UCOREIMG)`。
+         - `-serial null`将串行端口输出重定向到null，这样可以避免在QEMU中显示额外的信息。
+         - `&`将QEMU进程放到后台执行。
+      
+      3. `$(V)sleep 2`
+         这行代码使得Makefile脚本暂停执行2秒钟。这通常是为了给QEMU足够的时间启动并等待调试器的连接。
+      
+      4. `$(V)$(TERMINAL) -e "cgdb -q -x tools/gdbinit"`
+         这行代码打开一个新的终端窗口并执行`cgdb`，一个图形化的GDB前端：
+         - `$(TERMINAL)`是一个变量，指向用户的终端程序。
+         - `-e`参数指定终端执行的命令。
+         - `"cgdb -q -x tools/gdbinit"`启动`cgdb`并告诉它使用`tools/gdbinit`作为GDB的初始化脚本。`-q`参数使`cgdb`在启动时不显示任何欢迎信息。
+      
+      综上所述，这段代码的作用是为了调试`$(UCOREIMG)`操作系统镜像。它启动了一个QEMU虚拟机实例，并设置了GDB调试器，允许开发者在图形界面中调试操作系统代码。
+      ```
+   
+      这里是定义了一个类似`make`命令的参数形式，当我们执行`make debug`时，`shell`中会执行`debug`这个块中的所有命令。
+   
+      注意到，这些命令中包含了`"cgdb -q -x tools/gdbinit"`，也就是说需要用到`tools/gdbinit`这个文件用来初始化`gdb`，`gdbinit`的初始内容如下：
+   
+      ```shell
+      file obj/bootblock.o
+      target remote :1234
+      break bootmain
+      continue
+      ```
+   
+      在不修改这个文件的情况下，它会输出关于目标文件`bootblock`的一些基本信息，然后链接到`qemu`，在`bootmain`这个函数的起始位置设置一个断点，随后启动程序。
+   
+      因此，为了我们的单步调试，我们将这个文件内容修改为：
+   
+      ```shell
+      file obj/bootblock.o
+      set architecture i8086
+      break *0xffff0	# 这句没用
+      target remote :1234
+      break *0x7c00
+      ```
+   
+      这将调试环境设置为`i8086`，并链接到`qemu`以及在两个内存地址处设置断点。一个问题在于，在`0xffff0`这个位置设置的断点似乎并不能被触发，暂时没明白原因。至于`0x7c00`这个地址是`bios`找到了主引导记录后将操作系统内核加载到内存中的位置，也是我们下一个问题要做的。
+   
+   2. 这个问题在上面已经得到解答。
+   
+   3. 单步机器代码执行的指令是`si`，在`gdb`调试器中输入即可。输入`x /10i $pc`可以查看接下来十条反汇编的代码，在执行`bootmain`函数之前，它的内容和`bootasm.S`和`bootblock.asm`的内容都是相同的。
 
